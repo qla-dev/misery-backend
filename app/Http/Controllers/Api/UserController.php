@@ -1,0 +1,3 @@
+<?php
+namespace App\Http\Controllers\Api; use App\Http\Controllers\Controller; use App\Http\Resources\UserResource; use App\Models\User; use Illuminate\Http\Request;
+class UserController extends Controller { public function index(){return UserResource::collection(User::all());} public function store(Request $r){$data=$r->validate(['name'=>'required|string|max:255','email'=>'nullable|email']); return new UserResource(User::create($data));} public function show(User $user){return new UserResource($user);} public function update(Request $r,User $user){$user->update($r->validate(['name'=>'sometimes|string|max:255','email'=>'nullable|email'])); return new UserResource($user);} public function destroy(User $user){$user->delete(); return response()->noContent();} }
