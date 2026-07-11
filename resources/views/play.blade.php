@@ -6,7 +6,7 @@
 const api='{{ url('/api') }}';let game=null,user=null;const q=id=>document.getElementById(id);
 async function call(path,options={}){const r=await fetch(api+path,{headers:{'Content-Type':'application/json','Accept':'application/json'},...options});const j=await r.json();if(!r.ok)throw Error(j.message||'Request failed');return j.data||j}
 async function createGame(){try{set(await call('/games',{method:'POST',body:JSON.stringify({name:q('name').value})}))}catch(e){q('message').textContent=e.message}}
-async function joinGame(){try{set(await call('/games/code/'+q('code').value.toUpperCase()+'/join',{method:'POST',body:JSON.stringify({name:q('name').value})}))}catch(e){q('message').textContent=e.message}}
+async function joinGame(){try{const code=q('code').value.trim().toUpperCase();if(!code)throw Error('Enter a room code.');set(await call('/games/code/'+encodeURIComponent(code)+'/join',{method:'POST',body:JSON.stringify({name:q('name').value})}))}catch(e){q('message').textContent=e.message}}
 function set(x){game=x.game.data||x.game;user=x.user.data||x.user;q('entry').className='hidden';q('room').className='';render();setInterval(refresh,3000)}
 async function refresh(){if(game){game=await call('/games/'+game.id);render()}}
 function render(){q('roomCode').textContent=game.code;q('players').innerHTML=game.members.map(x=>'<p>'+x.name+'</p>').join('');q('start').style.display=game.owner_id===user.id?'block':'none';if(game.started){q('room').className='hidden';q('game').className='';q('card').textContent=game.current_card?.title||'No more cards';q('moves').innerHTML=game.moves.map(x=>'<p>'+x.player.name+': '+(x.correct?'Correct':'Wrong')+'</p>').join('')}}
