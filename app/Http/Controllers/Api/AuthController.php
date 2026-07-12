@@ -107,6 +107,18 @@ class AuthController extends Controller
         return response()->json(['user' => $this->formatUser($request->user())]);
     }
 
+    public function updateProfile(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'min:2', 'max:15'],
+        ]);
+
+        $user = $request->user();
+        $user->update(['name' => trim($validated['name'])]);
+
+        return response()->json(['user' => $this->formatUser($user->refresh())]);
+    }
+
     public function logout(Request $request)
     {
         $request->user()?->currentAccessToken()?->delete();

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -76,5 +77,21 @@ class SocialAuthTest extends TestCase
     public function test_me_requires_a_bearer_token(): void
     {
         $this->getJson('/api/auth/me')->assertUnauthorized();
+    }
+
+    public function test_authenticated_user_can_change_username(): void
+    {
+        $user = User::factory()->create(['name' => 'Old Name']);
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson('/api/auth/profile', ['name' => 'New Name'])
+            ->assertOk()
+            ->assertJsonPath('user.name', 'New Name');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'name' => 'New Name',
+        ]);
     }
 }

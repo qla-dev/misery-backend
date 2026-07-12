@@ -8,9 +8,31 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('personal_access_tokens')) {
+            Schema::table('personal_access_tokens', function (Blueprint $table) {
+                $table->string('tokenable_type', 191)->change();
+            });
+
+            if (! Schema::hasIndex('personal_access_tokens', ['tokenable_type', 'tokenable_id'])) {
+                Schema::table('personal_access_tokens', function (Blueprint $table) {
+                    $table->index(['tokenable_type', 'tokenable_id']);
+                });
+            }
+
+            if (! Schema::hasIndex('personal_access_tokens', ['token'])) {
+                Schema::table('personal_access_tokens', function (Blueprint $table) {
+                    $table->unique('token');
+                });
+            }
+
+            return;
+        }
+
         Schema::create('personal_access_tokens', function (Blueprint $table) {
             $table->id();
-            $table->morphs('tokenable');
+            $table->string('tokenable_type', 191);
+            $table->unsignedBigInteger('tokenable_id');
+            $table->index(['tokenable_type', 'tokenable_id']);
             $table->string('name');
             $table->string('token', 64)->unique();
             $table->text('abilities')->nullable();
