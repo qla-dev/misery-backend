@@ -5,12 +5,13 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Laravel\Sanctum\HasApiTokens;
 
-class User extends Model
+class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory;
+    use HasApiTokens, HasFactory;
 
     /**
      * The attributes that are mass assignable.
@@ -20,6 +21,8 @@ class User extends Model
     protected $fillable = [
         'name',
         'email',
+        'google_id',
+        'apple_id',
         'color',
     ];
 
@@ -35,5 +38,8 @@ class User extends Model
      *
      * @return array<string, string>
      */
-    public function games() { return $this->belongsToMany(Game::class, 'members')->withTimestamps(); }
+    public function games()
+    {
+        return $this->belongsToMany(Game::class, 'members')->withTimestamps();
+    }
 }
