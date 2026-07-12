@@ -1,13 +1,177 @@
 <?php
+
 namespace App\Http\Controllers\Api;
-use App\Http\Controllers\Controller; use App\Http\Resources\GameResource; use App\Models\{Card,Game,Move,User}; use Illuminate\Http\Request; use Illuminate\Support\Facades\DB; use Illuminate\Support\Str;
-class GameController extends Controller {
- private function full(Game $game): GameResource { return new GameResource($game->load(['members','currentCard','moves'=>fn($q)=>$q->with(['player','card'])->latest()])); }
- public function index(){return GameResource::collection(Game::with('members')->latest()->get());}
- public function store(Request $r){$d=$r->validate(['name'=>'required|string|max:255','email'=>'nullable|email']); return DB::transaction(function()use($d){$user=User::create($d); do{$letters='';for($i=0;$i<4;$i++)$letters.=chr(random_int(65,90));$chars=str_split($letters.random_int(1000,9999));shuffle($chars);$code=implode($chars);}while(Game::whereCode($code)->exists()); $game=Game::create(['code'=>$code,'owner_id'=>$user->id]); $game->members()->attach($user); return response()->json(['game'=>$this->full($game),'user'=>new \App\Http\Resources\UserResource($user)],201);});}
- public function show(Game $game){return $this->full($game);} public function byCode(string $code){$game=Game::where('code',strtoupper($code))->firstOrFail(); return $this->full($game);}
- public function update(Request $r,Game $game){$game->update($r->validate(['started'=>'sometimes|boolean']));return $this->full($game);} public function destroy(Game $game){$game->delete();return response()->noContent();}
- public function join(Request $r,string $code){$d=$r->validate(['name'=>'required|string|max:255','email'=>'nullable|email']); return DB::transaction(function()use($d,$code){$game=Game::where('code',strtoupper($code))->lockForUpdate()->firstOrFail(); abort_if($game->started,422,'Game already started.'); abort_if($game->members()->count()>=8,422,'No more available seats in this room.'); $user=User::create($d); $game->members()->attach($user); return response()->json(['game'=>$this->full($game),'user'=>new \App\Http\Resources\UserResource($user)],201);});}
- public function start(Request $r,Game $game){$r->validate(['user_id'=>'required|integer']); abort_unless($game->owner_id===$r->integer('user_id'),403); return DB::transaction(function()use($game){$game->load('members'); if(!$game->started){$needed=$game->members->count()*3+1; $cards=Card::inRandomOrder()->limit($needed)->get(); abort_if($cards->count()<$needed,422,'Not enough cards. Run the card seeder.'); foreach($game->members as $member){foreach($cards->splice(0,3) as $card){DB::table('game_cards')->insert(['game_id'=>$game->id,'user_id'=>$member->id,'card_id'=>$card->id,'created_at'=>now(),'updated_at'=>now()]);}} $current=$cards->shift(); DB::table('game_cards')->insert(['game_id'=>$game->id,'user_id'=>null,'card_id'=>$current->id,'created_at'=>now(),'updated_at'=>now()]); $game->update(['started'=>true,'current_card_id'=>$current->id]);} return $this->full($game);});}
- public function move(Request $r,Game $game){$d=$r->validate(['player_id'=>'required|integer','correct'=>'required|boolean']); abort_unless($game->members()->where('users.id',$d['player_id'])->exists(),422,'Player is not in this game.'); abort_unless($game->started,422,'Game has not started.'); $move=Move::create(['game_id'=>$game->id,'player_id'=>$d['player_id'],'card_id'=>$game->current_card_id,'correct'=>$d['correct']]); if($d['correct'])DB::table('game_cards')->where('game_id',$game->id)->where('card_id',$game->current_card_id)->update(['user_id'=>$d['player_id'],'updated_at'=>now()]); $used=DB::table('game_cards')->where('game_id',$game->id)->pluck('card_id'); $next=Card::whereNotIn('id',$used)->inRandomOrder()->first(); if($next){DB::table('game_cards')->insert(['game_id'=>$game->id,'user_id'=>null,'card_id'=>$next->id,'created_at'=>now(),'updated_at'=>now()]);$game->update(['current_card_id'=>$next->id]);} return response()->json(['move'=>new \App\Http\Resources\MoveResource($move->load(['player','card'])),'game'=>$this->full($game)]);}
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\GameResource;
+use App\Http\Resources\MoveResource;
+use App\Http\Resources\UserResource;
+use App\Models\{Card, Game, Move, User};
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class GameController extends Controller
+{
+    private const COLORS = ['yellow', 'blue', 'emerald', 'purple', 'rose', 'orange', 'brown', 'silver'];
+
+    private function full(Game $game): GameResource
+    {
+        return new GameResource($game->load(['members', 'currentCard', 'moves' => fn ($q) => $q->with(['player', 'card'])->latest()]));
+    }
+
+    private function memberIds(Game $game): array
+    {
+        return DB::table('members')->where('game_id', $game->id)->orderBy('created_at')->orderBy('id')->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    private function nextMemberId(array $memberIds, int $currentId): int
+    {
+        $index = array_search($currentId, $memberIds, true);
+        return $memberIds[(($index === false ? 0 : $index + 1) % count($memberIds))];
+    }
+
+    private function drawNextCard(Game $game): void
+    {
+        $used = DB::table('game_cards')->where('game_id', $game->id)->pluck('card_id');
+        $next = Card::whereNotIn('id', $used)->inRandomOrder()->first();
+        if (!$next) return;
+        DB::table('game_cards')->insert(['game_id' => $game->id, 'user_id' => null, 'card_id' => $next->id, 'created_at' => now(), 'updated_at' => now()]);
+        $game->current_card_id = $next->id;
+    }
+
+    private function advanceStealOrRound(Game $game, bool $successful): void
+    {
+        $members = $this->memberIds($game);
+        $ownerId = (int) ($game->turn_owner_id ?: $game->current_player_id);
+        $nextActorId = $this->nextMemberId($members, (int) $game->current_player_id);
+        $roundComplete = $successful || $nextActorId === $ownerId;
+
+        if ($roundComplete) {
+            $nextOwnerId = $this->nextMemberId($members, $ownerId);
+            $this->drawNextCard($game);
+            $game->current_player_id = $nextOwnerId;
+            $game->turn_owner_id = $nextOwnerId;
+            $game->is_steal_turn = false;
+        } else {
+            $game->current_player_id = $nextActorId;
+            $game->is_steal_turn = true;
+        }
+        $game->awaiting_finish = false;
+        $game->save();
+    }
+
+    public function index()
+    {
+        return GameResource::collection(
+            Game::where('started', false)->with('members')->withCount('members')->having('members_count', '<', 8)->latest()->get()
+        );
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'nullable|email', 'color' => 'nullable|in:'.implode(',', self::COLORS)]);
+        return DB::transaction(function () use ($data) {
+            $data['color'] = $data['color'] ?? self::COLORS[0];
+            $user = User::create($data);
+            do {
+                $letters = '';
+                for ($i = 0; $i < 4; $i++) $letters .= chr(random_int(65, 90));
+                $chars = str_split($letters.random_int(1000, 9999));
+                shuffle($chars);
+                $code = implode($chars);
+            } while (Game::whereCode($code)->exists());
+            $game = Game::create(['code' => $code, 'owner_id' => $user->id]);
+            $game->members()->attach($user);
+            return response()->json(['game' => $this->full($game), 'user' => new UserResource($user)], 201);
+        });
+    }
+
+    public function show(Game $game) { return $this->full($game); }
+    public function byCode(string $code) { return $this->full(Game::where('code', strtoupper($code))->firstOrFail()); }
+    public function update(Request $request, Game $game) { $game->update($request->validate(['started' => 'sometimes|boolean'])); return $this->full($game); }
+    public function destroy(Game $game) { $game->delete(); return response()->noContent(); }
+
+    public function join(Request $request, string $code)
+    {
+        $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'nullable|email', 'color' => 'nullable|in:'.implode(',', self::COLORS)]);
+        return DB::transaction(function () use ($data, $code) {
+            $game = Game::where('code', strtoupper($code))->lockForUpdate()->firstOrFail();
+            abort_if($game->started, 422, 'Game already started.');
+            abort_if($game->members()->count() >= 8, 422, 'No more available seats in this room.');
+            $used = $game->members()->pluck('color')->filter()->all();
+            $requested = $data['color'] ?? self::COLORS[0];
+            $data['color'] = in_array($requested, $used, true) ? collect(self::COLORS)->first(fn ($color) => !in_array($color, $used, true)) : $requested;
+            $user = User::create($data);
+            $game->members()->attach($user);
+            return response()->json(['game' => $this->full($game), 'user' => new UserResource($user), 'color_changed' => $requested !== $data['color']], 201);
+        });
+    }
+
+    public function start(Request $request, Game $game)
+    {
+        $request->validate(['user_id' => 'required|integer']);
+        abort_unless($game->owner_id === $request->integer('user_id'), 403);
+        return DB::transaction(function () use ($game) {
+            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            $game->load('members');
+            abort_if($game->members->count() < 2, 422, 'At least two players are required to start.');
+            if (!$game->started) {
+                $needed = $game->members->count() * 3 + 1;
+                $cards = Card::inRandomOrder()->limit($needed)->get();
+                abort_if($cards->count() < $needed, 422, 'Not enough cards. Run the card seeder.');
+                foreach ($game->members as $member) {
+                    foreach ($cards->splice(0, 3) as $card) {
+                        DB::table('game_cards')->insert(['game_id' => $game->id, 'user_id' => $member->id, 'card_id' => $card->id, 'created_at' => now(), 'updated_at' => now()]);
+                    }
+                }
+                $current = $cards->shift();
+                $firstPlayerId = $this->memberIds($game)[0];
+                DB::table('game_cards')->insert(['game_id' => $game->id, 'user_id' => null, 'card_id' => $current->id, 'created_at' => now(), 'updated_at' => now()]);
+                $game->update(['started' => true, 'current_card_id' => $current->id, 'current_player_id' => $firstPlayerId, 'turn_owner_id' => $firstPlayerId, 'awaiting_finish' => false, 'is_steal_turn' => false]);
+            }
+            return $this->full($game);
+        });
+    }
+
+    public function move(Request $request, Game $game)
+    {
+        $data = $request->validate(['player_id' => 'required|integer', 'correct' => 'required|boolean']);
+        return DB::transaction(function () use ($data, $game) {
+            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            abort_unless($game->started, 422, 'Game has not started.');
+            abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'It is not your turn.');
+            abort_if($game->awaiting_finish, 409, 'Finish the current turn first.');
+            $move = Move::create(['game_id' => $game->id, 'player_id' => $data['player_id'], 'card_id' => $game->current_card_id, 'correct' => $data['correct']]);
+            if ($data['correct']) {
+                DB::table('game_cards')->where('game_id', $game->id)->where('card_id', $game->current_card_id)->update(['user_id' => $data['player_id'], 'updated_at' => now()]);
+            }
+            $game->update(['awaiting_finish' => true]);
+            return response()->json(['move' => new MoveResource($move->load(['player', 'card'])), 'game' => $this->full($game)]);
+        });
+    }
+
+    public function finishTurn(Request $request, Game $game)
+    {
+        $data = $request->validate(['player_id' => 'required|integer']);
+        return DB::transaction(function () use ($data, $game) {
+            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'Only the active player can finish this turn.');
+            abort_unless($game->awaiting_finish, 409, 'There is no completed turn to finish.');
+            $move = Move::where('game_id', $game->id)->latest()->firstOrFail();
+            $this->advanceStealOrRound($game, (bool) $move->correct);
+            return response()->json(['game' => $this->full($game)]);
+        });
+    }
+
+    public function passSteal(Request $request, Game $game)
+    {
+        $data = $request->validate(['player_id' => 'required|integer']);
+        return DB::transaction(function () use ($data, $game) {
+            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            abort_unless($game->is_steal_turn && !$game->awaiting_finish, 409, 'There is no steal to pass.');
+            abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'Only the active stealer can pass.');
+            $this->advanceStealOrRound($game, false);
+            return response()->json(['game' => $this->full($game)]);
+        });
+    }
 }
