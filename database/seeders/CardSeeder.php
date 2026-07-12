@@ -4,11 +4,14 @@ namespace Database\Seeders;
 
 use App\Models\Card;
 use Illuminate\Database\Seeder;
+use App\Models\Stack;
 
 class CardSeeder extends Seeder
 {
     public function run(): void
     {
+        $normal = Stack::firstOrCreate(['slug' => 'normal'], ['name' => 'Normal']);
+        Stack::firstOrCreate(['slug' => 'spicy'], ['name' => 'Spicy']);
         $events = [
             ['Miss the bus', 'You watch it pull away just as you reach the stop.'],
             ['Lose your keys', 'Every pocket is empty and the spare key is nowhere nearby.'],
@@ -43,7 +46,8 @@ class CardSeeder extends Seeder
                 'subtitle' => $subtitle,
                 'score' => $score,
                 'image' => '0',
-                'deck' => $i % 5 === 0 ? 'spicy' : 'normal',
+                'deck' => 'normal',
+                'stack_id' => $normal->id,
             ])->save();
         }
     }

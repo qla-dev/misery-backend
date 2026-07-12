@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(\App\Http\Middleware\Cors::class);
+        $middleware->alias(['cms.auth' => \App\Http\Middleware\CmsBasicAuth::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

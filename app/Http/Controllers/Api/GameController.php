@@ -38,7 +38,9 @@ class GameController extends Controller
     private function drawNextCard(Game $game): void
     {
         $used = DB::table('game_cards')->where('game_id', $game->id)->pluck('card_id');
-        $next = Card::whereNotIn('id', $used)->inRandomOrder()->first();
+        $next = Card::whereNotIn('id', $used)
+            ->when($game->stack_id, fn ($query) => $query->where('stack_id', $game->stack_id))
+            ->inRandomOrder()->first();
         if (! $next) {
             return;
         }
@@ -141,8 +143,9 @@ class GameController extends Controller
 
     public function start(Request $request, Game $game)
     {
-        $data = $request->validate(['user_id' => 'required|integer']);
+        $data = $request->validate(['user_id' => 'required|integer', 'stack' => 'sometimes|string|exists:stacks,slug']);
         $userId = (int) $data['user_id'];
+        $stack = \App\Models\Stack::where('slug', $data['stack'] ?? 'normal')->firstOrFail();
 
         Log::info('Game start requested', [
             'game_id' => $game->id,
@@ -160,8 +163,9 @@ class GameController extends Controller
             abort(403, 'Only the room owner can start the game.');
         }
 
-        return DB::transaction(function () use ($game) {
+        return DB::transaction(function () use ($game, $stack) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            if (! $game->started) $game->update(['stack_id' => $stack->id]);
             $game->load('members');
             $memberCount = $game->members->count();
 
@@ -175,7 +179,7 @@ class GameController extends Controller
 
             if (! $game->started) {
                 $needed = $memberCount * 3 + 1;
-                $cards = Card::inRandomOrder()->limit($needed)->get();
+                $cards = Card::where('stack_id', $game->stack_id)->inRandomOrder()->limit($needed)->get();
                 if ($cards->count() < $needed) {
                     Log::warning('Game start rejected: not enough cards', [
                         'game_id' => $game->id,
