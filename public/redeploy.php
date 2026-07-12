@@ -74,6 +74,27 @@ $findExecutable = static function (array $commands): ?string {
     return null;
 };
 
+$downloadComposer = static function (string $targetFile, callable $write): bool {
+    $composerUrl = 'https://getcomposer.org/download/latest-stable/composer.phar';
+    $write("Composer was not found. Downloading local composer.phar...\n");
+
+    $composerPhar = @file_get_contents($composerUrl);
+
+    if ($composerPhar === false) {
+        $write("Could not download Composer from {$composerUrl}.\n");
+        $write("Ensure allow_url_fopen is enabled, or upload composer.phar to the project root.\n");
+        return false;
+    }
+
+    if (@file_put_contents($targetFile, $composerPhar) === false) {
+        $write("Could not write Composer to {$targetFile}. Check directory permissions.\n");
+        return false;
+    }
+
+    $write("Saved local Composer to {$targetFile}.\n");
+    return true;
+};
+
 $php = $findExecutable(array_filter([
     PHP_SAPI === 'cli' ? PHP_BINARY : null,
     'php',
@@ -91,12 +112,21 @@ if ($php === null) {
 
 $phpCommand = $shellArg($php);
 $composerPhar = $baseDir.DIRECTORY_SEPARATOR.'composer.phar';
-$composer = is_file($composerPhar)
-    ? $phpCommand.' '.$shellArg($composerPhar)
-    : $findExecutable(['composer']);
+$composer = null;
+
+if (is_file($composerPhar)) {
+    $composer = $phpCommand.' '.$shellArg($composerPhar);
+} else {
+    $globalComposer = $findExecutable(['composer']);
+
+    if ($globalComposer !== null) {
+        $composer = $shellArg($globalComposer);
+    } elseif ($downloadComposer($composerPhar, $write)) {
+        $composer = $phpCommand.' '.$shellArg($composerPhar);
+    }
+}
 
 if ($composer === null) {
-    $write("Composer was not found. Install it globally or place composer.phar in the project root.\n");
     exit(127);
 }
 
@@ -176,4 +206,3 @@ foreach ($commands as $step) {
 }
 
 $write("\nRedeploy completed successfully in ".(time() - $startedAt)."s.\n");
-
