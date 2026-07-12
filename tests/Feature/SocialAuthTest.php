@@ -94,4 +94,21 @@ class SocialAuthTest extends TestCase
             'name' => 'New Name',
         ]);
     }
+
+    public function test_username_must_be_unique(): void
+    {
+        User::factory()->create(['name' => 'Taken Name']);
+        $user = User::factory()->create(['name' => 'Current Name']);
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson('/api/auth/profile', ['name' => 'Taken Name'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('name');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'name' => 'Current Name',
+        ]);
+    }
 }
