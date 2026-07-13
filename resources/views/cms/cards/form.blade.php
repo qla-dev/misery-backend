@@ -1,7 +1,7 @@
 @extends('layouts.cms')
 @section('title',$card->exists?'Edit card':'New card')
 @section('content')
-@php($image = old('image',$card->image) && old('image',$card->image) !== '0' ? (str_starts_with(old('image',$card->image),'http') ? old('image',$card->image) : Storage::disk('public')->url(preg_replace('#^storage/#','',old('image',$card->image)))) : null)
+@php($image = old('image',$card->image) && old('image',$card->image) !== '0' ? (str_starts_with(old('image',$card->image),'http') ? old('image',$card->image) : url('/card-images/'.preg_replace('#^storage/#','',old('image',$card->image)))) : null)
 <div class="toolbar"><div><h1>{{ $card->exists?'Edit card':'New card' }}</h1><p class="hint">Artwork uses the image first and the native dummy illustration as fallback.</p></div><a class="btn secondary" href="{{ route('cms.cards.index') }}">Back</a></div>
 <div class="form-grid"><form class="panel" method="post" enctype="multipart/form-data" action="{{ $card->exists?route('cms.cards.update',$card):route('cms.cards.store') }}">@csrf @if($card->exists)@method('PUT')@endif
 <div class="field"><label>Title / situation</label><input name="title" required value="{{ old('title',$card->title) }}"></div>

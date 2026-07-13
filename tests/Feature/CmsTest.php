@@ -56,4 +56,14 @@ class CmsTest extends TestCase
             && $request['output_format'] === 'png'
             && str_contains($request['prompt'], 'pure white #FFFFFF and primary amber #FACC15'));
     }
+
+    public function test_generated_card_images_are_served_without_public_storage_symlink(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('cards/generated/example.png', 'png-bytes');
+
+        $this->get('/card-images/cards/generated/example.png')
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'immutable, max-age=31536000, public');
+    }
 }

@@ -3,8 +3,17 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Cms\CardController as CmsCardController;
 use App\Http\Controllers\Cms\StackController as CmsStackController;
+use Illuminate\Support\Facades\Storage;
 
 Route::view('/', 'play');
+Route::get('/card-images/{path}', function (string $path) {
+    abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
+    abort_unless(Storage::disk('public')->exists($path), 404);
+    return response()->file(Storage::disk('public')->path($path), [
+        'Cache-Control' => 'public, max-age=31536000, immutable',
+        'Content-Type' => Storage::disk('public')->mimeType($path) ?: 'image/png',
+    ]);
+})->where('path', '.+')->name('card-images.show');
 Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::view('/', 'cms.home')->name('home');
     Route::resource('cards', CmsCardController::class)->except('show');
