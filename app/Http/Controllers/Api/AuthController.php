@@ -144,7 +144,10 @@ class AuthController extends Controller
 
     private function formatUser(User $user): array
     {
-        return $user->only(['id', 'name', 'email', 'color']);
+        return $user->only([
+            'id', 'name', 'email', 'color', 'pro_status', 'pro_started_at', 'pro_ends_at',
+            'revenuecat_product_id', 'revenuecat_entitlement_id',
+        ]);
     }
 
     private function verifyGoogleIdToken(string $idToken): array

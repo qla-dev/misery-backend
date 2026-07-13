@@ -1,11 +1,13 @@
 <?php
 use App\Http\Controllers\Api\{AuthController,CardController,GameController,MemberController,MoveController,UserController}; use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\RevenueCatController;
 Route::prefix('auth')->group(function () {
     Route::post('google', [AuthController::class, 'google']);
     Route::post('apple', [AuthController::class, 'apple']);
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
         Route::patch('profile', [AuthController::class, 'updateProfile']);
+        Route::post('revenuecat/sync-pro', [RevenueCatController::class, 'syncPro']);
         Route::post('logout', [AuthController::class, 'logout']);
     });
 });

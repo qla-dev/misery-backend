@@ -24,6 +24,11 @@ class User extends Authenticatable
         'google_id',
         'apple_id',
         'color',
+        'pro_status',
+        'pro_started_at',
+        'pro_ends_at',
+        'revenuecat_product_id',
+        'revenuecat_entitlement_id',
     ];
 
     /**
@@ -38,6 +43,14 @@ class User extends Authenticatable
      *
      * @return array<string, string>
      */
+    protected function casts(): array
+    {
+        return [
+            'pro_started_at' => 'datetime',
+            'pro_ends_at' => 'datetime',
+        ];
+    }
+
     public function games()
     {
         return $this->belongsToMany(Game::class, 'members')->withTimestamps();
