@@ -54,10 +54,15 @@ class CmsTest extends TestCase
             && $request['model'] === 'openai/gpt-image-1'
             && $request['background'] === 'transparent'
             && $request['output_format'] === 'png'
+            && str_starts_with($request['input_references'][0]['image_url']['url'], 'data:image/svg+xml;base64,')
             && str_contains($request['prompt'], 'Never return an amber-only image')
             && str_contains($request['prompt'], 'no eyes')
             && str_contains($request['prompt'], 'every visible person, object, and detail must be a solid filled')
-            && str_contains($request['prompt'], 'pure white #FFFFFF and primary amber #FACC15'));
+            && str_contains($request['prompt'], 'main human silhouette must ALWAYS be solid pure white #FFFFFF')
+            && str_contains($request['prompt'], 'event-specific element that causes or represents the misery must be solid primary amber #FACC15')
+            && str_contains($request['prompt'], 'main-silhouette SVG')
+            && str_contains($request['prompt'], 'highly creative')
+            && str_contains($request['prompt'], 'no larger than 100 KB'));
     }
 
     public function test_generated_card_images_are_served_without_public_storage_symlink(): void
