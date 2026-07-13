@@ -1,5 +1,11 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # Serve the built React landing site directly at public URLs.
+    RewriteRule ^$ public/dist/index.html [L]
+    RewriteRule ^(privacy|terms)/?$ public/dist/index.html [L]
+
+    # Keep Laravel in control of /api, /cms, /simulator and dynamic assets.
     RewriteCond %{REQUEST_URI} !^/public/
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>

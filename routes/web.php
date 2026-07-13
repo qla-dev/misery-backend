@@ -3,10 +3,14 @@
 use App\Http\Controllers\Cms\CardController as CmsCardController;
 use App\Http\Controllers\Cms\QuestionController as CmsQuestionController;
 use App\Http\Controllers\Cms\StackController as CmsStackController;
+use App\Http\Controllers\Cms\StoreOrderController as CmsStoreOrderController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
-Route::view('/', 'play');
+Route::get('/', fn () => response()->file(public_path('dist/index.html')));
+Route::get('/privacy', fn () => response()->file(public_path('dist/index.html')));
+Route::get('/terms', fn () => response()->file(public_path('dist/index.html')));
+Route::view('/simulator', 'play')->middleware('cms.auth')->name('simulator');
 Route::get('/card-images/{path}', function (string $path) {
     abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
     abort_unless(Storage::disk('public')->exists($path), 404);
@@ -26,4 +30,6 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::get('stacks', [CmsStackController::class, 'index'])->name('stacks.index');
     Route::post('stacks', [CmsStackController::class, 'store'])->name('stacks.store');
     Route::delete('stacks/{stack}', [CmsStackController::class, 'destroy'])->name('stacks.destroy');
+    Route::get('orders', [CmsStoreOrderController::class, 'index'])->name('orders.index');
+    Route::patch('orders/{order}', [CmsStoreOrderController::class, 'update'])->name('orders.update');
 });
