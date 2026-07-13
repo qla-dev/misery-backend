@@ -109,6 +109,15 @@ class GameController extends Controller
         return $this->full(Game::where('code', strtoupper($code))->firstOrFail());
     }
 
+    public function setHostLobbyPresence(Request $request, Game $game)
+    {
+        $data = $request->validate(['user_id' => 'required|integer', 'present' => 'required|boolean']);
+        abort_unless((int) $game->owner_id === (int) $data['user_id'], 403, 'Only the room owner can update host presence.');
+        $game->update(['host_in_lobby' => $data['present']]);
+
+        return $this->full($game);
+    }
+
     public function update(Request $request, Game $game)
     {
         $game->update($request->validate(['started' => 'sometimes|boolean']));
@@ -165,6 +174,19 @@ class GameController extends Controller
 
         return DB::transaction(function () use ($data, $game, $stack) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            if ($game->started && $game->winner_id) {
+                DB::table('game_cards')->where('game_id', $game->id)->delete();
+                $game->moves()->delete();
+                $game->update([
+                    'started' => false,
+                    'current_card_id' => null,
+                    'current_player_id' => null,
+                    'turn_owner_id' => null,
+                    'winner_id' => null,
+                    'awaiting_finish' => false,
+                    'is_steal_turn' => false,
+                ]);
+            }
             if (! $game->started) $game->update(['stack_id' => $stack->id, 'target_score' => $data['target_score'], 'winner_id' => null]);
             $game->load('members');
             $memberCount = $game->members->count();
@@ -197,7 +219,7 @@ class GameController extends Controller
                 $current = $cards->shift();
                 $firstPlayerId = $this->memberIds($game)[0];
                 DB::table('game_cards')->insert(['game_id' => $game->id, 'user_id' => null, 'card_id' => $current->id, 'created_at' => now(), 'updated_at' => now()]);
-                $game->update(['started' => true, 'current_card_id' => $current->id, 'current_player_id' => $firstPlayerId, 'turn_owner_id' => $firstPlayerId, 'awaiting_finish' => false, 'is_steal_turn' => false]);
+                $game->update(['started' => true, 'host_in_lobby' => false, 'current_card_id' => $current->id, 'current_player_id' => $firstPlayerId, 'turn_owner_id' => $firstPlayerId, 'awaiting_finish' => false, 'is_steal_turn' => false]);
 
                 Log::info('Game started successfully', [
                     'game_id' => $game->id,
