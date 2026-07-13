@@ -7,7 +7,6 @@ use App\Http\Controllers\Api\MemberController;
 use App\Http\Controllers\Api\MoveController;
 use App\Http\Controllers\Api\QuestionController;
 use App\Http\Controllers\Api\RevenueCatController;
-use App\Http\Controllers\Api\StoreOrderController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,7 +21,6 @@ Route::prefix('auth')->group(function () {
     });
 });
 Route::get('questions', [QuestionController::class, 'index']);
-Route::post('store-orders', [StoreOrderController::class, 'store'])->middleware('throttle:10,1');
 Route::apiResources(['users' => UserController::class, 'games' => GameController::class, 'members' => MemberController::class, 'cards' => CardController::class, 'moves' => MoveController::class]);
 Route::get('games/code/{code}', [GameController::class, 'byCode']);
 Route::post('games/code/{code}/join', [GameController::class, 'join']);

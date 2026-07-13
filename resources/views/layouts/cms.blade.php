@@ -9,7 +9,6 @@
 <a class="{{ request()->routeIs('cms.cards.*')?'active':'' }}" href="{{ route('cms.cards.index') }}">Cards</a>
 <a class="{{ request()->routeIs('cms.questions.*')?'active':'' }}" href="{{ route('cms.questions.index') }}">Questions</a>
 <a class="{{ request()->routeIs('cms.stacks.*')?'active':'' }}" href="{{ route('cms.stacks.index') }}">Stacks</a>
-<a class="{{ request()->routeIs('cms.orders.*')?'active':'' }}" href="{{ route('cms.orders.index') }}">Orders</a>
 </nav></header><main>
 @if(session('success'))<div class="flash">{{ session('success') }}</div>@endif
 @if($errors->any())<div class="errors">{{ $errors->first() }}</div>@endif
