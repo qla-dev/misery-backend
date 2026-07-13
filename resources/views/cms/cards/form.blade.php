@@ -12,14 +12,26 @@
 <div class="field"><label>Upload PNG/JPG/WebP</label><input id="imageUpload" name="image_upload" type="file" accept="image/png,image/jpeg,image/webp"><div class="hint">Maximum 8 MB. Upload replaces the current managed image.</div></div>
 <button type="submit">Save card</button></form>
 <div><div class="preview">@if($image)<img id="preview" src="{{ $image }}" alt="Card artwork">@else<div id="fallback" class="placeholder">⚡<div class="hint">Native fallback illustration</div></div><img id="preview" style="display:none" alt="Card artwork">@endif</div>
-@if($card->exists)<form class="panel" style="margin-top:16px" method="post" action="{{ route('cms.cards.generate',$card) }}" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Generating…';">@csrf
+@if($card->exists)<form class="panel" id="artwork-generation-form" style="margin-top:16px" method="post" action="{{ route('cms.cards.generate',$card) }}">@csrf
 <h3>AI artwork</h3><p class="hint">Generates a transparent 1024×1024 PNG using only white and primary amber. The file is copied into backend storage and assigned to this card.</p><button type="submit">Generate artwork</button></form>@else<div class="panel" style="margin-top:16px"><p class="hint">Save the card first to enable artwork generation.</p></div>@endif
 @if(session('generated_prompt'))<details class="panel" style="margin-top:16px"><summary>Last generation prompt</summary><pre style="white-space:pre-wrap">{{ session('generated_prompt') }}</pre></details>@endif
 </div></div>
 @endsection
 @push('scripts')<script>
 const upload=document.getElementById('imageUpload'),path=document.getElementById('imagePath'),preview=document.getElementById('preview'),fallback=document.getElementById('fallback');
+const generationForm=document.getElementById('artwork-generation-form');
 function show(src){if(!src)return;preview.src=src;preview.style.display='block';if(fallback)fallback.style.display='none'}
 upload?.addEventListener('change',()=>{const file=upload.files?.[0];if(file)show(URL.createObjectURL(file))});
 path?.addEventListener('input',()=>{if(/^https?:\/\//.test(path.value))show(path.value)});
+generationForm?.addEventListener('submit',()=>{
+    console.info('[CMS artwork] Generate clicked',{
+        cardId:{{ Illuminate\Support\Js::from($card->id) }},
+        cardTitle:{{ Illuminate\Support\Js::from($card->title) }},
+        endpoint:generationForm.action,
+        clickedAt:new Date().toISOString(),
+    });
+    const button=generationForm.querySelector('button');
+    button.disabled=true;
+    button.textContent='Generating…';
+});
 </script>@endpush

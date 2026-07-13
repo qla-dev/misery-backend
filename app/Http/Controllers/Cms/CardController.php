@@ -8,6 +8,7 @@ use App\Models\Stack;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
@@ -63,10 +64,28 @@ class CardController extends Controller
         return redirect()->route('cms.cards.index')->with('success', 'Card deleted.');
     }
 
-    public function generate(Card $card)
+    public function generate(Request $request, Card $card)
     {
+        $generationId = (string) Str::uuid();
+        $startedAt = microtime(true);
+        $logContext = [
+            'generation_id' => $generationId,
+            'card_id' => $card->id,
+            'card_title' => $card->title,
+            'ip' => $request->ip(),
+            'model' => config('services.openrouter.image_model'),
+        ];
+
+        Log::info('CMS artwork generation clicked', $logContext + [
+            'referer' => $request->headers->get('referer'),
+            'openrouter_configured' => filled(config('services.openrouter.key')),
+            'provider_url' => rtrim((string) config('services.openrouter.base_url'), '/').'/images',
+        ]);
+
         if (! config('services.openrouter.key')) {
-            return back()->withErrors(['generation' => 'OPENROUTER_API_KEY is not configured on the backend.']);
+            Log::warning('CMS artwork generation stopped: API key missing', $logContext);
+
+            return back()->withErrors(['generation' => "OPENROUTER_API_KEY is not configured on the backend. [Generation: {$generationId}]"]);
         }
         $prompt = implode("\n", [
             'Use case: stylized-concept',
@@ -98,7 +117,13 @@ class CardController extends Controller
                 'HTTP-Referer' => config('services.openrouter.http_referer'),
                 'X-Title' => config('services.openrouter.title'),
             ]);
-            $response = Http::withToken(config('services.openrouter.key'))
+            $references = $this->silhouetteReferences();
+            Log::info('CMS artwork generation sending provider request', $logContext + [
+                'prompt_bytes' => strlen($prompt),
+                'reference_count' => count($references),
+            ]);
+
+            $providerResponse = Http::withToken(config('services.openrouter.key'))
                 ->withHeaders($headers)
                 ->acceptJson()
                 ->asJson()
@@ -110,34 +135,82 @@ class CardController extends Controller
                     'quality' => 'medium',
                     'background' => 'transparent',
                     'output_format' => 'png',
-                    'input_references' => $this->silhouetteReferences(),
-                ])->throw()->json();
-        } catch (RequestException $error) {
-            return back()->withErrors(['generation' => data_get($error->response?->json(), 'error.message', $error->getMessage())]);
-        } catch (Throwable $error) {
-            report($error);
+                    'input_references' => $references,
+                ]);
 
-            return back()->withErrors(['generation' => $error->getMessage() ?: 'Artwork generation could not be started.']);
+            Log::info('CMS artwork generation provider responded', $logContext + [
+                'provider_status' => $providerResponse->status(),
+                'provider_content_type' => $providerResponse->header('Content-Type'),
+                'provider_response_bytes' => strlen($providerResponse->body()),
+                'provider_error' => $providerResponse->successful()
+                    ? null
+                    : Str::limit((string) data_get($providerResponse->json(), 'error.message', $providerResponse->body()), 2000),
+            ]);
+
+            $response = $providerResponse->throw()->json();
+        } catch (RequestException $error) {
+            $message = (string) data_get($error->response?->json(), 'error.message', $error->getMessage());
+            Log::error('CMS artwork generation provider request failed', $logContext + [
+                'exception' => $error,
+                'provider_status' => $error->response?->status(),
+                'provider_error' => Str::limit($message, 2000),
+                'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
+
+            return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
+        } catch (Throwable $error) {
+            Log::error('CMS artwork generation could not start', $logContext + [
+                'exception' => $error,
+                'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
+
+            $message = $error->getMessage() ?: 'Artwork generation could not be started.';
+
+            return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
         }
 
         try {
             $encoded = data_get($response, 'data.0.b64_json');
+            Log::info('CMS artwork generation parsing image data', $logContext + [
+                'response_keys' => is_array($response) ? array_keys($response) : [],
+                'encoded_image_present' => filled($encoded),
+                'encoded_image_bytes' => is_string($encoded) ? strlen($encoded) : 0,
+            ]);
             abort_unless($encoded, 502, 'Image provider returned no image data.');
             $path = 'cards/generated/card-'.$card->id.'-'.now()->format('YmdHis').'.png';
             $png = base64_decode($encoded, true);
             abort_unless($png !== false, 502, 'Image provider returned invalid image data.');
+            $originalBytes = strlen($png);
             $png = $this->optimizeGeneratedPng($png);
+            Log::info('CMS artwork generation optimized image', $logContext + [
+                'original_png_bytes' => $originalBytes,
+                'optimized_png_bytes' => strlen($png),
+                'storage_path' => $path,
+            ]);
             abort_if(strlen($png) > self::MAX_GENERATED_PNG_BYTES, 502, 'Generated PNG is larger than 100 KB after optimization. Please generate it again.');
             Storage::disk('public')->put($path, $png);
+            abort_unless(Storage::disk('public')->exists($path), 500, 'Generated PNG was not found after writing it to storage.');
             $this->deleteManagedImage($card->image);
             $card->update(['image' => $path]);
         } catch (Throwable $error) {
-            report($error);
+            Log::error('CMS artwork generation image processing failed', $logContext + [
+                'exception' => $error,
+                'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
 
-            return back()->withErrors(['generation' => $error->getMessage() ?: 'Generated artwork could not be saved.']);
+            $message = $error->getMessage() ?: 'Generated artwork could not be saved.';
+
+            return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
         }
 
-        return back()->with('success', 'Transparent artwork generated and saved.')->with('generated_prompt', $prompt);
+        Log::info('CMS artwork generation completed', $logContext + [
+            'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'storage_path' => $path,
+        ]);
+
+        return back()
+            ->with('success', "Transparent artwork generated and saved. [Generation: {$generationId}]")
+            ->with('generated_prompt', $prompt);
     }
 
     private function silhouetteReferences(): array
