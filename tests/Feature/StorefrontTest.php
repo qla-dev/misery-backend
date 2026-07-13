@@ -14,6 +14,19 @@ class StorefrontTest extends TestCase
         $this->get('/')->assertOk()->assertHeader('Content-Type', 'text/html; charset=UTF-8');
         $this->get('/privacy')->assertOk()->assertHeader('Content-Type', 'text/html; charset=UTF-8');
         $this->get('/terms')->assertOk()->assertHeader('Content-Type', 'text/html; charset=UTF-8');
+
+        $this->assertStringContainsString('The party game of terrible decisions', file_get_contents(public_path('dist/index.html')));
+        $this->assertStringContainsString('Privacy Policy | Misery Meter', file_get_contents(public_path('dist/privacy/index.html')));
+        $this->assertStringContainsString('Terms of Use | Misery Meter', file_get_contents(public_path('dist/terms/index.html')));
+    }
+
+    public function test_landing_social_image_is_a_large_png(): void
+    {
+        $response = $this->get('/misery-og.png')->assertOk()->assertHeader('Content-Type', 'image/png');
+        $size = getimagesizefromstring($response->getContent());
+
+        $this->assertSame(1200, $size[0]);
+        $this->assertSame(630, $size[1]);
     }
 
     public function test_simulator_requires_the_same_basic_auth_as_cms(): void

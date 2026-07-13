@@ -47,7 +47,7 @@ const copy = {
 
 const scenarios = [
   { title: 'MISS THE BUS', sub: 'You watch it pull away as you reach the stop.', score: 3.7, icon: 'bus' },
-  { title: 'SPILL COFFEE ON YOUR LAPTOP', sub: 'One tipped cup heads straight for the keyboard.', score: 55.5, icon: 'coffee' },
+  { title: 'STRUCK BY LIGHTNING IN BROAD DAYLIGHT', titleBs: 'POGODI VAS MUNJA USRED BIJELA DANA', sub: 'Clear skies. No shelter. Just a lightning bolt that chose you.', subBs: 'Vedro nebo. Nema zaklona. Samo munja koja je izabrala baš vas.', score: 55.5, icon: 'lightning' },
   { title: 'GET FOOD POISONING', sub: 'Dinner fights back. All night.', score: 33.3, icon: 'food' },
   { title: 'MISS A FLIGHT', sub: 'The gate closes while the plane is still outside.', score: 72.4, icon: 'plane' },
 ];
@@ -109,14 +109,14 @@ function detectStorePlatform() {
   return null;
 }
 
-function StoreButton({ platform, compact = false, lang = 'bs', light = false }) {
+function StoreButton({ platform, compact = false, lang = 'en', light = false }) {
   const ios = platform === 'ios';
   const Icon = ios ? Apple : Play;
   const label = ios ? 'iOS' : 'Android';
   return <a className={`store-button ${compact ? 'compact' : ''} ${light ? 'light' : ''}`} href={ios ? APP_STORE_URL : PLAY_STORE_URL} target="_blank" rel="noreferrer"><Icon/><span><small>{lang === 'bs' ? 'PREUZMI ZA' : 'DOWNLOAD FOR'}</small><b>{label}</b></span></a>;
 }
 
-function StoreButtons({ compact = false, lang = 'bs', light = false, platformAware = false }) {
+function StoreButtons({ compact = false, lang = 'en', light = false, platformAware = false }) {
   const [platform, setPlatform] = useState(null);
   useEffect(() => setPlatform(detectStorePlatform()), []);
   const visible = platformAware && platform ? [platform] : ['ios', 'android'];
@@ -126,7 +126,7 @@ function StoreButtons({ compact = false, lang = 'bs', light = false, platformAwa
 function GameCard({ card, hidden = false, className = '', animatedArtwork = false }) {
   return <article className={`game-card ${className}`}>
     <div className="card-top"><span>MISERY</span><span>MM–{String(Math.round((card.score || 0) * 10)).padStart(3, '0')}</span></div>
-    <div className="art-disc">{animatedArtwork || className.includes('hero-card') ? <MascotLetter className="card-mascot"/> : <Pictogram type={card.icon}/>}</div>
+    <div className="art-disc">{animatedArtwork || className.includes('hero-card') || card.icon === 'lightning' ? <MascotLetter className="card-mascot"/> : <Pictogram type={card.icon}/>}</div>
     <div className="card-copy"><p>{card.title}</p>{card.sub && <small>{card.sub}</small>}</div>
     <div className={`score-orbit ${hidden ? 'hidden-score' : ''}`}><b>{hidden ? '?' : card.score}</b><span>MISERY RATE</span></div>
   </article>;
@@ -166,17 +166,23 @@ function LegalPage({ type, lang, goHome }) {
 export default function App() {
   const initialPath = window.location.pathname.replace(/\/$/, '') || '/';
   const [page, setPage] = useState(initialPath === '/privacy' ? 'privacy' : initialPath === '/terms' ? 'terms' : 'home');
-  const [lang, setLang] = useState('bs');
+  const [lang, setLang] = useState('en');
   const [menu, setMenu] = useState(false);
   const [scenarioIndex, setScenarioIndex] = useState(1);
   const [guess, setGuess] = useState(46);
   const [revealed, setRevealed] = useState(false);
   const [faqOpen, setFaqOpen] = useState(0);
   const t = copy[lang];
-  const scenario = scenarios[scenarioIndex];
+  const rawScenario = scenarios[scenarioIndex];
+  const scenario = { ...rawScenario, title: lang === 'bs' && rawScenario.titleBs ? rawScenario.titleBs : rawScenario.title, sub: lang === 'bs' && rawScenario.subBs ? rawScenario.subBs : rawScenario.sub };
   const delta = Math.abs(guess - scenario.score);
   const verdict = delta < 8 ? (lang==='bs'?'ZASTRAŠUJUĆE PRECIZNO':'SCARILY ACCURATE') : delta < 20 ? (lang==='bs'?'BLIZU. DOVOLJNO BLIZU.':'CLOSE. UNCOMFORTABLY CLOSE.') : (lang==='bs'?'TVOM INSTINKTU TREBA POMOĆ':'YOUR INSTINCT NEEDS HELP');
   const links = useMemo(() => [['#game',t.nav[0]],['#how',t.nav[1]],['#cards',t.nav[2]],['#shop',t.nav[3]]], [t]);
+  useEffect(() => {
+    const titles = { home: 'Misery Meter — The party game of terrible decisions', privacy: 'Privacy Policy | Misery Meter', terms: 'Terms of Use | Misery Meter' };
+    document.title = titles[page];
+    document.documentElement.lang = lang;
+  }, [lang, page]);
   useEffect(() => { const onPop=()=>setPage(location.pathname.startsWith('/privacy')?'privacy':location.pathname.startsWith('/terms')?'terms':'home'); addEventListener('popstate',onPop); return()=>removeEventListener('popstate',onPop); }, []);
   function navigate(next) { const path=next==='home'?'/':`/${next}`; history.pushState({},'',path); setPage(next); scrollTo(0,0); }
   function nextScenario() { setScenarioIndex(x=>(x+1)%scenarios.length); setGuess(Math.round(20+Math.random()*60)); setRevealed(false); }

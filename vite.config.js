@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { resolve } from 'node:path';
 
 export default defineConfig({
     root: 'resources/landing',
@@ -8,5 +9,12 @@ export default defineConfig({
     build: {
         outDir: '../../public/dist',
         emptyOutDir: true,
+        rollupOptions: {
+            input: {
+                home: resolve(process.cwd(), 'resources/landing/index.html'),
+                privacy: resolve(process.cwd(), 'resources/landing/privacy/index.html'),
+                terms: resolve(process.cwd(), 'resources/landing/terms/index.html'),
+            },
+        },
     },
 });
