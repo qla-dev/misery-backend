@@ -7,6 +7,7 @@
 
     # Public React landing routes. API, CMS and simulator continue to Laravel.
     RewriteRule ^$ dist/index.html [L]
+    RewriteRule ^cookies/?$ dist/cookies/index.html [L]
     RewriteRule ^privacy/?$ dist/privacy/index.html [L]
     RewriteRule ^terms/?$ dist/terms/index.html [L]
 

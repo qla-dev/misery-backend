@@ -3,6 +3,7 @@
 
     # Serve the built React landing site directly at public URLs.
     RewriteRule ^$ public/dist/index.html [L]
+    RewriteRule ^cookies/?$ public/dist/cookies/index.html [L]
     RewriteRule ^privacy/?$ public/dist/privacy/index.html [L]
     RewriteRule ^terms/?$ public/dist/terms/index.html [L]
 

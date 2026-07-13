@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
 Route::get('/', fn () => response()->file(public_path('dist/index.html')));
+Route::get('/cookies', fn () => response()->file(public_path('dist/cookies/index.html')));
 Route::get('/privacy', fn () => response()->file(public_path('dist/privacy/index.html')));
 Route::get('/terms', fn () => response()->file(public_path('dist/terms/index.html')));
 Route::get('/misery-og.png', function () {

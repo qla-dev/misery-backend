@@ -12,6 +12,7 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 home: resolve(process.cwd(), 'resources/landing/index.html'),
+                cookies: resolve(process.cwd(), 'resources/landing/cookies/index.html'),
                 privacy: resolve(process.cwd(), 'resources/landing/privacy/index.html'),
                 terms: resolve(process.cwd(), 'resources/landing/terms/index.html'),
             },

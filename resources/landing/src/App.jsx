@@ -23,7 +23,7 @@ const copy = {
     order: 'Naruči sada', preorder: 'Narudžba · plaćanje pouzećem', included: 'U kutiji',
     app: 'MISERY PRO', appText: 'Premium špilovi, Spicy deck i sav budući Pro sadržaj u aplikaciji.', appCta: 'Preuzmi aplikaciju',
     rules: 'Pravila igre', faq: 'Pitanja koja spašavaju prijateljstva', close: 'Zatvori',
-    privacy: 'Privatnost', terms: 'Uslovi korištenja', rights: 'Sva prava zadržana.',
+    privacy: 'Privatnost', terms: 'Uslovi korištenja', cookies: 'Kolačići', rights: 'Sva prava zadržana.',
     orderTitle: 'Donesi bijedu na sto.', orderText: 'Rezerviši fizičku igru. Plaćanje je pouzećem; ništa se ne naplaćuje online.',
     name: 'Ime i prezime', email: 'Email', phone: 'Telefon', address: 'Adresa za dostavu', quantity: 'Količina', total: 'Ukupno', submit: 'Potvrdi narudžbu', sending: 'Šaljem…', done: 'Narudžba je zaprimljena.', doneText: 'Javit ćemo se prije slanja radi potvrde adrese i dostave.',
   },
@@ -39,7 +39,7 @@ const copy = {
     order: 'Order now', preorder: 'Order · cash on delivery', included: 'Inside the box',
     app: 'MISERY PRO', appText: 'Premium packs, the Spicy deck, and every future Pro addition in the app.', appCta: 'Download the app',
     rules: 'Game rules', faq: 'Questions that save friendships', close: 'Close',
-    privacy: 'Privacy', terms: 'Terms of use', rights: 'All rights reserved.',
+    privacy: 'Privacy', terms: 'Terms of use', cookies: 'Cookies', rights: 'All rights reserved.',
     orderTitle: 'Bring misery to the table.', orderText: 'Reserve the physical game. Payment is cash on delivery; nothing is charged online.',
     name: 'Full name', email: 'Email', phone: 'Phone', address: 'Delivery address', quantity: 'Quantity', total: 'Total', submit: 'Confirm order', sending: 'Sending…', done: 'Order received.', doneText: 'We will contact you before shipping to confirm the address and delivery.',
   },
@@ -134,8 +134,9 @@ function GameCard({ card, hidden = false, className = '', animatedArtwork = fals
 
 function LegalPage({ type, lang, goHome }) {
   const isPrivacy = type === 'privacy';
-  const title = isPrivacy ? copy[lang].privacy : copy[lang].terms;
-  const sections = lang === 'bs' ? (isPrivacy ? [
+  const isCookies = type === 'cookies';
+  const title = isPrivacy ? copy[lang].privacy : isCookies ? copy[lang].cookies : copy[lang].terms;
+  const legalSections = lang === 'bs' ? (isPrivacy ? [
     ['Podaci koje obrađujemo', 'Kada koristite web ili aplikaciju, možemo obraditi osnovne tehničke podatke potrebne za sigurnost, stabilnost, multiplayer i korisničku podršku.'],
     ['Plaćanje i kupovina', 'Web ne prikuplja niti čuva podatke platnih kartica. Kupovine u mobilnoj aplikaciji obrađuju Apple, Google i RevenueCat prema vlastitim pravilima.'],
     ['Kako koristimo podatke', 'Podatke koristimo za izvršenje narudžbe, podršku, sprečavanje zloupotrebe i zakonske obaveze. Lične podatke ne prodajemo trećim stranama.'],
@@ -160,12 +161,26 @@ function LegalPage({ type, lang, goHome }) {
     ['Digital content', 'Misery Pro purchases, renewals, and refunds are also governed by Apple, Google, RevenueCat, or another payment processor.'],
     ['Intellectual property', 'The name, design, rules, illustrations, code, and content may not be copied, resold, or distributed without permission. The service may change for security, maintenance, or development.'],
   ]);
+  const cookieSections = lang === 'bs' ? [
+    ['Šta su kolačići', 'Kolačići su male tekstualne datoteke koje web stranica može sačuvati u pregledniku radi osnovnog rada, sigurnosti i pamćenja izbora.'],
+    ['Neophodni kolačići', 'Koristimo samo tehnički neophodne podatke za sigurnost stranice, usmjeravanje i stabilan rad. Bez njih pojedine funkcije ne bi radile ispravno.'],
+    ['Analitika i oglašavanje', 'Trenutno ne koristimo reklamne kolačiće niti prodajemo podatke za oglašavanje. Ako uvedemo analitiku koja zahtijeva saglasnost, ova politika i izbori korisnika bit će ažurirani prije aktivacije.'],
+    ['Mobilna aplikacija', 'Native iOS i Android aplikacija ne koristi web kolačiće za igranje. Apple, Google, RevenueCat i vanjski servisi mogu obrađivati vlastite tehničke identifikatore prema svojim pravilima.'],
+    ['Kontrola i kontakt', 'Kolačiće možete obrisati ili blokirati kroz postavke preglednika. Za pitanja o ovoj politici kontaktirajte qla.dev tim.'],
+  ] : [
+    ['What cookies are', 'Cookies are small text files a website may store in your browser for essential operation, security, and remembering choices.'],
+    ['Essential cookies', 'We use only technically necessary data for site security, routing, and stable operation. Some functions would not work correctly without it.'],
+    ['Analytics and advertising', 'We currently use no advertising cookies and do not sell data for advertising. If consent-based analytics are introduced, this policy and user choices will be updated before activation.'],
+    ['Mobile application', 'The native iOS and Android app does not use web cookies for gameplay. Apple, Google, RevenueCat, and external services may process their own technical identifiers under their policies.'],
+    ['Control and contact', 'You can delete or block cookies in your browser settings. Contact the qla.dev team with questions about this policy.'],
+  ];
+  const sections = isCookies ? cookieSections : legalSections;
   return <main className="legal-page"><nav><Brand/><button className="ghost-button" onClick={goHome}><ArrowLeft size={17}/>{copy[lang].close}</button></nav><section><p className="kicker">LEGAL · UPDATED 13 JULY 2026</p><h1>{title}</h1><p className="legal-intro">{lang === 'bs' ? 'Jasno, kratko i bez sitnih slova koja pokušavaju nešto sakriti.' : 'Clear, concise, and without fine print designed to hide things.'}</p><div className="legal-grid">{sections.map(([heading, body], i)=><article key={heading}><b>{String(i+1).padStart(2,'0')}</b><div><h2>{heading}</h2><p>{body}</p></div></article>)}</div></section></main>;
 }
 
 export default function App() {
   const initialPath = window.location.pathname.replace(/\/$/, '') || '/';
-  const [page, setPage] = useState(initialPath === '/privacy' ? 'privacy' : initialPath === '/terms' ? 'terms' : 'home');
+  const [page, setPage] = useState(initialPath === '/privacy' ? 'privacy' : initialPath === '/terms' ? 'terms' : initialPath === '/cookies' ? 'cookies' : 'home');
   const [lang, setLang] = useState('en');
   const [menu, setMenu] = useState(false);
   const [scenarioIndex, setScenarioIndex] = useState(1);
@@ -179,11 +194,11 @@ export default function App() {
   const verdict = delta < 8 ? (lang==='bs'?'ZASTRAŠUJUĆE PRECIZNO':'SCARILY ACCURATE') : delta < 20 ? (lang==='bs'?'BLIZU. DOVOLJNO BLIZU.':'CLOSE. UNCOMFORTABLY CLOSE.') : (lang==='bs'?'TVOM INSTINKTU TREBA POMOĆ':'YOUR INSTINCT NEEDS HELP');
   const links = useMemo(() => [['#game',t.nav[0]],['#how',t.nav[1]],['#cards',t.nav[2]],['#shop',t.nav[3]]], [t]);
   useEffect(() => {
-    const titles = { home: 'Misery Meter — The party game of terrible decisions', privacy: 'Privacy Policy | Misery Meter', terms: 'Terms of Use | Misery Meter' };
+    const titles = { home: 'Misery Meter — The party game of terrible decisions', privacy: 'Privacy Policy | Misery Meter', terms: 'Terms of Use | Misery Meter', cookies: 'Cookie Policy | Misery Meter' };
     document.title = titles[page];
     document.documentElement.lang = lang;
   }, [lang, page]);
-  useEffect(() => { const onPop=()=>setPage(location.pathname.startsWith('/privacy')?'privacy':location.pathname.startsWith('/terms')?'terms':'home'); addEventListener('popstate',onPop); return()=>removeEventListener('popstate',onPop); }, []);
+  useEffect(() => { const onPop=()=>setPage(location.pathname.startsWith('/privacy')?'privacy':location.pathname.startsWith('/terms')?'terms':location.pathname.startsWith('/cookies')?'cookies':'home'); addEventListener('popstate',onPop); return()=>removeEventListener('popstate',onPop); }, []);
   function navigate(next) { const path=next==='home'?'/':`/${next}`; history.pushState({},'',path); setPage(next); scrollTo(0,0); }
   function nextScenario() { setScenarioIndex(x=>(x+1)%scenarios.length); setGuess(Math.round(20+Math.random()*60)); setRevealed(false); }
   if (page !== 'home') return <LegalPage type={page} lang={lang} goHome={()=>navigate('home')}/>;
@@ -207,6 +222,6 @@ export default function App() {
       <section className="rules-faq"><div className="rules-card"><div><p className="kicker">FULL RULEBOOK · MISERY LANE</p><h2>{t.rules}</h2><p>{lang==='bs'?'Počni s tri poredane karte na svom Misery Laneu. Na potezu postavi novu kartu između dvije ocjene. Tačno? Zadrži je. Pogrešno? Sljedeći igrač može ukrasti. Prvi koji izgradi ciljani Misery Lane pobjeđuje.':'Start with three ordered cards on your Misery Lane. On your turn, place a new one between two scores. Correct? Keep it. Wrong? The next player can steal. First to build the target Misery Lane wins.'}</p></div><div className="rule-lane"><span>03.7</span><i/><span>?</span><i/><span>55.5</span><i/><span>72.4</span></div></div><div className="faq"><p className="kicker">FAQ</p><h2>{t.faq}</h2>{faqs.map(([q,a],i)=><article className={faqOpen===i?'open':''} key={q}><button onClick={()=>setFaqOpen(faqOpen===i?-1:i)}><span>{lang==='bs'?q:[['How many can play?'],['How long is a game?'],['Where can I play?'],['What happens when I am wrong?']][i]}</span><ChevronDown/></button><div><p>{lang==='bs'?a:[['Two to eight. Solo mode in the app gives you three lives.'],['Usually 20–40 minutes depending on player count and target lane length.'],['Misery Meter is available for iOS and Android with online multiplayer, solo mode, and premium decks.'],['The next player gets a chance to steal it by placing it correctly in their lane.']][i]}</p></div></article>)}</div></section>
     </main>
 
-    <footer><div className="footer-top"><Brand/><p>{lang==='bs'?'Party igra o tome ko najbolje razumije koliko život može biti loš.':'The party game about who truly understands how bad life can get.'}</p><StoreButtons compact lang={lang}/></div><div className="footer-bottom"><span>© 2026 MISERY METER · {t.rights}</span><div><button onClick={()=>navigate('privacy')}>{t.privacy}</button><button onClick={()=>navigate('terms')}>{t.terms}</button><a href="https://qla.dev" target="_blank" rel="noreferrer">qla.dev ↗</a></div></div></footer>
+    <footer><div className="footer-top"><Brand/><p>{lang==='bs'?'Party igra o tome ko najbolje razumije koliko život može biti loš.':'The party game about who truly understands how bad life can get.'}</p><StoreButtons compact lang={lang}/></div><div className="footer-bottom"><span>© 2026 MISERY METER · {t.rights}</span><div><button onClick={()=>navigate('privacy')}>{t.privacy}</button><button onClick={()=>navigate('terms')}>{t.terms}</button><button onClick={()=>navigate('cookies')}>{t.cookies}</button><a href="https://qla.dev" target="_blank" rel="noreferrer">qla.dev ↗</a></div></div></footer>
   </div>;
 }

@@ -12,10 +12,12 @@ class StorefrontTest extends TestCase
     public function test_landing_and_legal_pages_serve_the_react_build(): void
     {
         $this->get('/')->assertOk()->assertHeader('Content-Type', 'text/html; charset=UTF-8');
+        $this->get('/cookies')->assertOk()->assertHeader('Content-Type', 'text/html; charset=UTF-8');
         $this->get('/privacy')->assertOk()->assertHeader('Content-Type', 'text/html; charset=UTF-8');
         $this->get('/terms')->assertOk()->assertHeader('Content-Type', 'text/html; charset=UTF-8');
 
         $this->assertStringContainsString('The party game of terrible decisions', file_get_contents(public_path('dist/index.html')));
+        $this->assertStringContainsString('Cookie Policy | Misery Meter', file_get_contents(public_path('dist/cookies/index.html')));
         $this->assertStringContainsString('Privacy Policy | Misery Meter', file_get_contents(public_path('dist/privacy/index.html')));
         $this->assertStringContainsString('Terms of Use | Misery Meter', file_get_contents(public_path('dist/terms/index.html')));
     }
