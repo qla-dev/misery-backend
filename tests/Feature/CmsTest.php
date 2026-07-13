@@ -121,9 +121,7 @@ class CmsTest extends TestCase
 
             return $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent'
                 && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
-                && $request['generationConfig']['responseModalities'] === ['IMAGE']
-                && $request['generationConfig']['responseFormat']['image']['aspectRatio'] === '1:1'
-                && $request['generationConfig']['responseFormat']['image']['imageSize'] === '1K'
+                && ! isset($request['generationConfig'])
                 && str_contains($request['contents'][0]['parts'][1]['text'], '<svg');
         });
     }

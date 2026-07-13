@@ -294,15 +294,6 @@ class CardController extends Controller
                         ['text' => "Required main-silhouette visual reference, supplied as SVG markup. Preserve its anonymous safety-sign proportions and color roles while adapting the pose:\n{$svg}"],
                     ],
                 ]],
-                'generationConfig' => [
-                    'responseModalities' => ['IMAGE'],
-                    'responseFormat' => [
-                        'image' => [
-                            'aspectRatio' => '1:1',
-                            'imageSize' => '1K',
-                        ],
-                    ],
-                ],
             ]);
 
         Log::info('CMS artwork direct Gemini fallback responded', $logContext + [
