@@ -58,4 +58,51 @@ class IncorrectMoveTurnAdvanceTest extends TestCase
         $this->assertSame($stealer->id, $game->turn_owner_id);
         $this->assertSame($nextCard->id, $game->current_card_id);
     }
+
+    public function test_first_three_cards_are_zero_points_and_target_finishes_game_immediately(): void
+    {
+        $player = User::factory()->create(['color' => 'yellow']);
+        $opponent = User::factory()->create(['color' => 'blue']);
+        $setupCards = collect([10, 20, 30])->map(fn (int $score) => Card::create([
+            'title' => "Setup {$score}",
+            'score' => $score,
+        ]));
+        $winningCard = Card::create(['title' => 'Winning card', 'score' => 40]);
+        $game = Game::create([
+            'code' => 'WXYZ5678',
+            'owner_id' => $player->id,
+            'started' => true,
+            'target_score' => 1,
+            'current_card_id' => $winningCard->id,
+            'current_player_id' => $player->id,
+            'turn_owner_id' => $player->id,
+        ]);
+        $game->members()->attach([$player->id, $opponent->id]);
+        foreach ($setupCards as $card) {
+            DB::table('game_cards')->insert([
+                'game_id' => $game->id,
+                'user_id' => $player->id,
+                'card_id' => $card->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+        DB::table('game_cards')->insert([
+            'game_id' => $game->id,
+            'user_id' => null,
+            'card_id' => $winningCard->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->postJson("/api/games/{$game->id}/moves", [
+            'player_id' => $player->id,
+            'correct' => true,
+        ])->assertOk();
+
+        $game->refresh();
+        $this->assertSame($player->id, $game->winner_id);
+        $this->assertFalse($game->awaiting_finish);
+        $this->assertSame(4, DB::table('game_cards')->where('game_id', $game->id)->where('user_id', $player->id)->count());
+    }
 }

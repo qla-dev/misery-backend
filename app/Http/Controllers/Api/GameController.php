@@ -143,7 +143,7 @@ class GameController extends Controller
 
     public function start(Request $request, Game $game)
     {
-        $data = $request->validate(['user_id' => 'required|integer', 'stack' => 'sometimes|string|exists:stacks,slug']);
+        $data = $request->validate(['user_id' => 'required|integer', 'stack' => 'sometimes|string|exists:stacks,slug', 'target_score' => 'required|integer|min:1|max:50']);
         $userId = (int) $data['user_id'];
         $stack = \App\Models\Stack::where('slug', $data['stack'] ?? 'normal')->firstOrFail();
 
@@ -163,9 +163,9 @@ class GameController extends Controller
             abort(403, 'Only the room owner can start the game.');
         }
 
-        return DB::transaction(function () use ($game, $stack) {
+        return DB::transaction(function () use ($data, $game, $stack) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
-            if (! $game->started) $game->update(['stack_id' => $stack->id]);
+            if (! $game->started) $game->update(['stack_id' => $stack->id, 'target_score' => $data['target_score'], 'winner_id' => null]);
             $game->load('members');
             $memberCount = $game->members->count();
 
@@ -218,6 +218,7 @@ class GameController extends Controller
         return DB::transaction(function () use ($data, $game) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
             abort_unless($game->started, 422, 'Game has not started.');
+            abort_if($game->winner_id, 409, 'This game has already finished.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'It is not your turn.');
             abort_if($game->awaiting_finish, 409, 'Finish the current turn first.');
             $move = Move::create(['game_id' => $game->id, 'player_id' => $data['player_id'], 'card_id' => $game->current_card_id, 'correct' => $data['correct']]);
@@ -225,7 +226,16 @@ class GameController extends Controller
                 DB::table('game_cards')->where('game_id', $game->id)->where('card_id', $game->current_card_id)->update(['user_id' => $data['player_id'], 'updated_at' => now()]);
             }
             if ($data['correct']) {
-                $game->update(['awaiting_finish' => true]);
+                $ownedCardCount = DB::table('game_cards')
+                    ->where('game_id', $game->id)
+                    ->where('user_id', $data['player_id'])
+                    ->count();
+                $points = max(0, $ownedCardCount - 3);
+                if ($points >= $game->target_score) {
+                    $game->update(['winner_id' => $data['player_id'], 'awaiting_finish' => false, 'is_steal_turn' => false]);
+                } else {
+                    $game->update(['awaiting_finish' => true]);
+                }
             } else {
                 // An incorrect placement never needs a separate confirmation.
                 // Move immediately to the next stealer, or start the next round
