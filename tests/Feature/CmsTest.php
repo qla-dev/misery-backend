@@ -164,6 +164,8 @@ class CmsTest extends TestCase
 
         Http::assertSent(fn ($request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
             && $request->hasHeader('x-goog-api-key', 'gemini-text-key')
+            && ! isset($request['systemInstruction'])
+            && ! isset($request['generationConfig'])
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Lose your keys')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), '<svg'));
     }

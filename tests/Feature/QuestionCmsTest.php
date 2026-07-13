@@ -95,11 +95,12 @@ class QuestionCmsTest extends TestCase
 
         Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
             && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
-            && data_get($request, 'generationConfig.responseMimeType') === 'application/json'
-            && data_get($request, 'generationConfig.responseJsonSchema.type') === 'object'
+            && ! isset($request['systemInstruction'])
+            && ! isset($request['generationConfig'])
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Who directed Jaws?')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Movies')
-            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Medium'));
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Medium')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'JSON Schema'));
     }
 
     public function test_failed_unique_batch_saves_nothing(): void

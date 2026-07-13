@@ -291,18 +291,10 @@ class CardController extends Controller
                 ->asJson()
                 ->timeout(120)
                 ->post($url, [
-                    'systemInstruction' => [
-                        'parts' => [[
-                            'text' => 'You create safe, minimal SVG pictograms. Return only complete SVG markup with no Markdown or explanation.',
-                        ]],
-                    ],
                     'contents' => [[
                         'role' => 'user',
-                        'parts' => [['text' => $prompt]],
+                        'parts' => [['text' => "You create safe, minimal SVG pictograms. Return only complete SVG markup with no Markdown or explanation.\n\n{$prompt}"]],
                     ]],
-                    'generationConfig' => [
-                        'temperature' => 0.85,
-                    ],
                 ])
                 ->throw()
                 ->json();

@@ -176,18 +176,15 @@ class QuestionController extends Controller
             ->asJson()
             ->timeout(120)
             ->post($url, [
-                'systemInstruction' => [
-                    'parts' => [['text' => $this->systemPrompt()]],
-                ],
                 'contents' => [[
                     'role' => 'user',
-                    'parts' => [['text' => $prompt]],
+                    'parts' => [['text' => implode("\n\n", [
+                        $this->systemPrompt(),
+                        $prompt,
+                        'Return only a JSON object matching this exact JSON Schema, with no Markdown or explanation:',
+                        json_encode($this->questionSchema(), JSON_UNESCAPED_SLASHES),
+                    ])]],
                 ]],
-                'generationConfig' => [
-                    'temperature' => 0.9,
-                    'responseMimeType' => 'application/json',
-                    'responseJsonSchema' => $this->questionSchema(),
-                ],
             ])
             ->throw()
             ->json();
