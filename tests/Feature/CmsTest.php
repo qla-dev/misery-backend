@@ -54,6 +54,9 @@ class CmsTest extends TestCase
             && $request['model'] === 'openai/gpt-image-1'
             && $request['background'] === 'transparent'
             && $request['output_format'] === 'png'
+            && str_contains($request['prompt'], 'Never return an amber-only image')
+            && str_contains($request['prompt'], 'no eyes')
+            && str_contains($request['prompt'], 'every visible person, object, and detail must be a solid filled')
             && str_contains($request['prompt'], 'pure white #FFFFFF and primary amber #FACC15'));
     }
 
