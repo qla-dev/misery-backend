@@ -62,6 +62,13 @@ class CmsTest extends TestCase
             && str_contains($request['prompt'], 'event-specific element that causes or represents the misery must be solid primary amber #FACC15')
             && str_contains($request['prompt'], 'main-silhouette SVG')
             && str_contains($request['prompt'], 'highly creative')
+            && str_contains($request['prompt'], 'one person, two people, or three people')
+            && str_contains($request['prompt'], 'do not force every situation into a one-person scene')
+            && str_contains($request['prompt'], 'people and objects must not look like they are floating')
+            && str_contains($request['prompt'], 'road, lane marking, sidewalk, floor')
+            && str_contains($request['prompt'], 'extremely simple, clean, geometric, and vector-like')
+            && str_contains($request['prompt'], 'never compete with the main action')
+            && str_contains($request['prompt'], 'dark #262626 and medium #525252')
             && str_contains($request['prompt'], 'no larger than 100 KB'));
     }
 

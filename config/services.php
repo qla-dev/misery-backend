@@ -28,6 +28,7 @@ return [
         'http_referer' => env('OPENROUTER_HTTP_REFERER', env('APP_URL')),
         'title' => env('OPENROUTER_TITLE', env('APP_NAME', 'Misery Index')),
         'image_model' => env('OPENROUTER_IMAGE_MODEL', 'openai/gpt-image-1'),
+        'text_model' => env('OPENROUTER_TEXT_MODEL', 'openai/gpt-4.1-mini'),
     ],
 
     'google' => [
