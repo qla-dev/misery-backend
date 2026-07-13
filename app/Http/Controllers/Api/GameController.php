@@ -224,7 +224,14 @@ class GameController extends Controller
             if ($data['correct']) {
                 DB::table('game_cards')->where('game_id', $game->id)->where('card_id', $game->current_card_id)->update(['user_id' => $data['player_id'], 'updated_at' => now()]);
             }
-            $game->update(['awaiting_finish' => true]);
+            if ($data['correct']) {
+                $game->update(['awaiting_finish' => true]);
+            } else {
+                // An incorrect placement never needs a separate confirmation.
+                // Move immediately to the next stealer, or start the next round
+                // once every eligible player has attempted the card.
+                $this->advanceStealOrRound($game, false);
+            }
 
             return response()->json(['move' => new MoveResource($move->load(['player', 'card'])), 'game' => $this->full($game)]);
         });
