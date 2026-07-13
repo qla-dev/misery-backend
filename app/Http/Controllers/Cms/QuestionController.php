@@ -8,7 +8,9 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use RuntimeException;
 use Throwable;
 
 class QuestionController extends Controller
@@ -76,40 +78,52 @@ class QuestionController extends Controller
             'difficulty' => ['required', 'integer', Rule::in(array_keys(Question::DIFFICULTIES))],
         ]);
 
-        if (! config('services.openrouter.key')) {
-            return back()->withInput()->withErrors(['generation' => 'OPENROUTER_API_KEY is not configured on the backend.']);
+        if (! config('services.gemini.key') && ! config('services.openrouter.key')) {
+            return back()->withInput()->withErrors([
+                'generation' => 'GEMINI_API_KEY and OPENROUTER_API_KEY are not configured on the backend.',
+            ]);
         }
 
         $allExisting = Question::query()->pluck('question')->all();
         $promptExamples = array_slice(array_reverse($allExisting), 0, 300);
 
-        try {
-            $response = Http::withToken(config('services.openrouter.key'))
-                ->withHeaders(array_filter([
-                    'HTTP-Referer' => config('services.openrouter.http_referer'),
-                    'X-Title' => config('services.openrouter.title'),
-                ]))
-                ->acceptJson()
-                ->asJson()
-                ->timeout(120)
-                ->post(rtrim(config('services.openrouter.base_url'), '/').'/chat/completions', [
-                    'model' => config('services.openrouter.text_model'),
-                    'messages' => [
-                        ['role' => 'system', 'content' => $this->systemPrompt()],
-                        ['role' => 'user', 'content' => $this->generationPrompt($selection, $promptExamples)],
-                    ],
-                    'temperature' => 0.9,
-                    'response_format' => $this->responseFormat(),
-                ])->throw()->json();
-        } catch (RequestException $error) {
-            return back()->withInput()->withErrors([
-                'generation' => data_get($error->response?->json(), 'error.message', $error->getMessage()),
-            ]);
+        $generationPrompt = $this->generationPrompt($selection, $promptExamples);
+        $providerUsed = 'gemini';
+        $content = null;
+
+        if (config('services.gemini.key')) {
+            try {
+                $content = $this->generateWithGemini($generationPrompt);
+            } catch (Throwable $geminiError) {
+                Log::warning('CMS question generation Gemini primary failed', [
+                    'exception' => $geminiError,
+                    'model' => config('services.gemini.text_model'),
+                    'status' => $geminiError instanceof RequestException ? $geminiError->response?->status() : null,
+                ]);
+
+                if (! config('services.openrouter.key')) {
+                    return back()->withInput()->withErrors([
+                        'generation' => 'Gemini question generation failed: '.$this->providerError($geminiError),
+                    ]);
+                }
+            }
         }
 
-        $content = data_get($response, 'choices.0.message.content');
         if (! is_string($content)) {
-            return back()->withInput()->withErrors(['generation' => 'The AI provider returned no question data.']);
+            $providerUsed = 'openrouter-fallback';
+            try {
+                $content = $this->generateWithOpenRouter($generationPrompt);
+            } catch (Throwable $openRouterError) {
+                Log::error('CMS question generation OpenRouter fallback failed', [
+                    'exception' => $openRouterError,
+                    'model' => config('services.openrouter.text_model'),
+                    'status' => $openRouterError instanceof RequestException ? $openRouterError->response?->status() : null,
+                ]);
+
+                return back()->withInput()->withErrors([
+                    'generation' => 'Question generation failed: '.$this->providerError($openRouterError),
+                ]);
+            }
         }
 
         try {
@@ -144,7 +158,90 @@ class QuestionController extends Controller
             ]);
         }
 
-        return redirect()->route('cms.questions.index')->with('success', '10 unique AI questions generated and saved as drafts.');
+        return redirect()->route('cms.questions.index')->with(
+            'success',
+            '10 unique AI questions generated via '.($providerUsed === 'gemini' ? 'Gemini' : 'OpenRouter fallback').' and saved as drafts.'
+        );
+    }
+
+    private function generateWithGemini(string $prompt): string
+    {
+        $model = (string) config('services.gemini.text_model');
+        $url = rtrim((string) config('services.gemini.base_url'), '/')
+            .'/models/'.rawurlencode($model).':generateContent';
+        $response = Http::withHeaders([
+            'x-goog-api-key' => config('services.gemini.key'),
+        ])
+            ->acceptJson()
+            ->asJson()
+            ->timeout(120)
+            ->post($url, [
+                'systemInstruction' => [
+                    'parts' => [['text' => $this->systemPrompt()]],
+                ],
+                'contents' => [[
+                    'role' => 'user',
+                    'parts' => [['text' => $prompt]],
+                ]],
+                'generationConfig' => [
+                    'temperature' => 0.9,
+                    'responseMimeType' => 'application/json',
+                    'responseJsonSchema' => $this->questionSchema(),
+                ],
+            ])
+            ->throw()
+            ->json();
+
+        $parts = (array) data_get($response, 'candidates.0.content.parts', []);
+        $content = implode('', array_map(
+            fn ($part) => is_string(data_get($part, 'text')) ? data_get($part, 'text') : '',
+            $parts
+        ));
+
+        if ($content === '') {
+            throw new RuntimeException('Gemini returned no question data.');
+        }
+
+        return $content;
+    }
+
+    private function generateWithOpenRouter(string $prompt): string
+    {
+        $response = Http::withToken(config('services.openrouter.key'))
+            ->withHeaders(array_filter([
+                'HTTP-Referer' => config('services.openrouter.http_referer'),
+                'X-Title' => config('services.openrouter.title'),
+            ]))
+            ->acceptJson()
+            ->asJson()
+            ->timeout(120)
+            ->post(rtrim(config('services.openrouter.base_url'), '/').'/chat/completions', [
+                'model' => config('services.openrouter.text_model'),
+                'messages' => [
+                    ['role' => 'system', 'content' => $this->systemPrompt()],
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+                'temperature' => 0.9,
+                'response_format' => $this->responseFormat(),
+            ])
+            ->throw()
+            ->json();
+
+        $content = data_get($response, 'choices.0.message.content');
+        if (! is_string($content) || $content === '') {
+            throw new RuntimeException('OpenRouter returned no question data.');
+        }
+
+        return $content;
+    }
+
+    private function providerError(Throwable $error): string
+    {
+        if ($error instanceof RequestException) {
+            return (string) data_get($error->response?->json(), 'error.message', $error->getMessage());
+        }
+
+        return $error->getMessage() ?: 'Unknown provider error.';
     }
 
     private function validated(Request $request): array
@@ -207,28 +304,33 @@ class QuestionController extends Controller
             'json_schema' => [
                 'name' => 'question_batch',
                 'strict' => true,
-                'schema' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'questions' => [
-                            'type' => 'array',
-                            'minItems' => self::GENERATION_COUNT,
-                            'maxItems' => 20,
-                            'items' => [
-                                'type' => 'object',
-                                'properties' => [
-                                    'question' => ['type' => 'string'],
-                                    'answer' => ['type' => 'string'],
-                                ],
-                                'required' => ['question', 'answer'],
-                                'additionalProperties' => false,
-                            ],
+                'schema' => $this->questionSchema(),
+            ],
+        ];
+    }
+
+    private function questionSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'questions' => [
+                    'type' => 'array',
+                    'minItems' => self::GENERATION_COUNT,
+                    'maxItems' => 20,
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'question' => ['type' => 'string'],
+                            'answer' => ['type' => 'string'],
                         ],
+                        'required' => ['question', 'answer'],
+                        'additionalProperties' => false,
                     ],
-                    'required' => ['questions'],
-                    'additionalProperties' => false,
                 ],
             ],
+            'required' => ['questions'],
+            'additionalProperties' => false,
         ];
     }
 

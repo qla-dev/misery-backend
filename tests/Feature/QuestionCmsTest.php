@@ -55,9 +55,9 @@ class QuestionCmsTest extends TestCase
     {
         $this->question('Who directed Jaws?', 'Steven Spielberg', 'movies', 2, true);
         config([
-            'services.openrouter.key' => 'test-key',
-            'services.openrouter.base_url' => 'https://openrouter.ai/api/v1',
-            'services.openrouter.text_model' => 'openai/gpt-4.1-mini',
+            'services.gemini.key' => 'gemini-test-key',
+            'services.gemini.base_url' => 'https://generativelanguage.googleapis.com/v1',
+            'services.gemini.text_model' => 'gemini-3.1-flash-lite',
         ]);
 
         $candidates = [
@@ -75,8 +75,10 @@ class QuestionCmsTest extends TestCase
             ['question' => 'What is the subtitle of the second Lord of the Rings film?', 'answer' => 'The Two Towers'],
         ];
         Http::fake([
-            'openrouter.ai/*' => Http::response([
-                'choices' => [['message' => ['content' => json_encode(['questions' => $candidates])]]],
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [[
+                    'text' => json_encode(['questions' => $candidates]),
+                ]]]]],
             ]),
         ]);
 
@@ -91,13 +93,13 @@ class QuestionCmsTest extends TestCase
         $this->assertSame(10, Question::where('generated_by_ai', true)->where('category', 'movies')->where('difficulty', 2)->count());
         $this->assertSame(1, Question::where('question', 'Who directed Jaws?')->count());
 
-        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
-            && $request['model'] === 'openai/gpt-4.1-mini'
-            && data_get($request, 'response_format.type') === 'json_schema'
-            && data_get($request, 'response_format.json_schema.strict') === true
-            && str_contains(data_get($request, 'messages.1.content'), 'Who directed Jaws?')
-            && str_contains(data_get($request, 'messages.1.content'), 'Movies')
-            && str_contains(data_get($request, 'messages.1.content'), 'Medium'));
+        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
+            && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
+            && data_get($request, 'generationConfig.responseMimeType') === 'application/json'
+            && data_get($request, 'generationConfig.responseJsonSchema.type') === 'object'
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Who directed Jaws?')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Movies')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Medium'));
     }
 
     public function test_failed_unique_batch_saves_nothing(): void

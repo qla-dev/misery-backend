@@ -32,9 +32,15 @@ return [
     ],
 
     'gemini_fallback' => [
-        'key' => env('FALLBACK_GEMINI_API_KEY'),
-        'base_url' => env('FALLBACK_GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1'),
+        'key' => env('FALLBACK_GEMINI_API_KEY') ?: env('GEMINI_API_KEY'),
+        'base_url' => env('FALLBACK_GEMINI_BASE_URL', env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1')),
         'image_model' => env('FALLBACK_GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image'),
+    ],
+
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY') ?: env('FALLBACK_GEMINI_API_KEY'),
+        'base_url' => env('GEMINI_BASE_URL', env('FALLBACK_GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1')),
+        'text_model' => env('GEMINI_TEXT_MODEL', 'gemini-3.1-flash-lite'),
     ],
 
     'google' => [

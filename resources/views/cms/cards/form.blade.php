@@ -2,6 +2,7 @@
 @section('title',$card->exists?'Edit card':'New card')
 @section('content')
 @php($image = old('image',$card->image) && old('image',$card->image) !== '0' ? (str_starts_with(old('image',$card->image),'http') ? old('image',$card->image) : url('/card-images/'.preg_replace('#^storage/#','',old('image',$card->image)))) : null)
+@php($svgImage = $card->svg_img ? url('/card-images/'.preg_replace('#^storage/#','',$card->svg_img)) : null)
 <div class="toolbar"><div><h1>{{ $card->exists?'Edit card':'New card' }}</h1><p class="hint">Artwork uses the image first and the native dummy illustration as fallback.</p></div><a class="btn secondary" href="{{ route('cms.cards.index') }}">Back</a></div>
 <div class="form-grid"><form class="panel" method="post" enctype="multipart/form-data" action="{{ $card->exists?route('cms.cards.update',$card):route('cms.cards.store') }}">@csrf @if($card->exists)@method('PUT')@endif
 <div class="field"><label>Title / situation</label><input name="title" required value="{{ old('title',$card->title) }}"></div>
@@ -11,15 +12,19 @@
 <div class="field"><label>Image URL or storage path</label><input id="imagePath" name="image" value="{{ old('image',$card->image) }}" placeholder="cards/uploads/example.png or https://..."></div>
 <div class="field"><label>Upload PNG/JPG/WebP</label><input id="imageUpload" name="image_upload" type="file" accept="image/png,image/jpeg,image/webp"><div class="hint">Maximum 8 MB. Upload replaces the current managed image.</div></div>
 <button type="submit">Save card</button></form>
-<div><div class="preview">@if($image)<img id="preview" src="{{ $image }}" alt="Card artwork">@else<div id="fallback" class="placeholder">⚡<div class="hint">Native fallback illustration</div></div><img id="preview" style="display:none" alt="Card artwork">@endif</div>
-@if($card->exists)<form class="panel" id="artwork-generation-form" style="margin-top:16px" method="post" action="{{ route('cms.cards.generate',$card) }}">@csrf
-<h3>AI artwork</h3><p class="hint">Generates a transparent 1024×1024 PNG using only white and primary amber. The file is copied into backend storage and assigned to this card.</p><button type="submit">Generate artwork</button></form>@else<div class="panel" style="margin-top:16px"><p class="hint">Save the card first to enable artwork generation.</p></div>@endif
+<div><section class="panel"><h3 style="margin-top:0">PNG illustration</h3><p class="hint">Current raster artwork used by the native game.</p><div class="preview" style="margin-top:14px">@if($image)<img id="preview" src="{{ $image }}" alt="PNG card artwork">@else<div id="fallback" class="placeholder">⚡<div class="hint">Native fallback illustration</div></div><img id="preview" style="display:none" alt="PNG card artwork">@endif</div>
+@if($card->exists)<form id="artwork-generation-form" style="margin-top:16px" method="post" action="{{ route('cms.cards.generate',$card) }}">@csrf
+<p class="hint">Generates a transparent 1024×1024 PNG using the image provider.</p><button type="submit">Generate PNG artwork</button></form>@else<p class="hint" style="margin-top:16px">Save the card first to enable artwork generation.</p>@endif</section>
+<section class="panel" style="margin-top:16px"><h3 style="margin-top:0">SVG code illustration</h3><p class="hint">Experimental CMS-only vector artwork generated as sanitized SVG code by the Gemini text model.</p><div class="preview" style="margin-top:14px">@if($svgImage)<img src="{{ $svgImage }}" alt="Generated SVG card artwork">@else<div class="placeholder">&lt;svg&gt;<div class="hint">No generated SVG illustration</div></div>@endif</div>
+@if($card->exists)<form id="svg-generation-form" style="margin-top:16px" method="post" action="{{ route('cms.cards.generate-svg',$card) }}">@csrf<button type="submit">Generate SVG with Gemini</button></form>@else<p class="hint" style="margin-top:16px">Save the card first to enable SVG generation.</p>@endif</section>
 @if(session('generated_prompt'))<details class="panel" style="margin-top:16px"><summary>Last generation prompt</summary><pre style="white-space:pre-wrap">{{ session('generated_prompt') }}</pre></details>@endif
+@if(session('generated_svg_prompt'))<details class="panel" style="margin-top:16px"><summary>Last SVG generation prompt</summary><pre style="white-space:pre-wrap">{{ session('generated_svg_prompt') }}</pre></details>@endif
 </div></div>
 @endsection
 @push('scripts')<script>
 const upload=document.getElementById('imageUpload'),path=document.getElementById('imagePath'),preview=document.getElementById('preview'),fallback=document.getElementById('fallback');
 const generationForm=document.getElementById('artwork-generation-form');
+const svgGenerationForm=document.getElementById('svg-generation-form');
 function show(src){if(!src)return;preview.src=src;preview.style.display='block';if(fallback)fallback.style.display='none'}
 upload?.addEventListener('change',()=>{const file=upload.files?.[0];if(file)show(URL.createObjectURL(file))});
 path?.addEventListener('input',()=>{if(/^https?:\/\//.test(path.value))show(path.value)});
@@ -33,5 +38,16 @@ generationForm?.addEventListener('submit',()=>{
     const button=generationForm.querySelector('button');
     button.disabled=true;
     button.textContent='Generating…';
+});
+svgGenerationForm?.addEventListener('submit',()=>{
+    console.info('[CMS SVG] Generate clicked',{
+        cardId:{{ Illuminate\Support\Js::from($card->id) }},
+        cardTitle:{{ Illuminate\Support\Js::from($card->title) }},
+        endpoint:svgGenerationForm.action,
+        clickedAt:new Date().toISOString(),
+    });
+    const button=svgGenerationForm.querySelector('button');
+    button.disabled=true;
+    button.textContent='Generating SVG…';
 });
 </script>@endpush

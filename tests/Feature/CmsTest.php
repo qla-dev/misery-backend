@@ -126,6 +126,75 @@ class CmsTest extends TestCase
         });
     }
 
+    public function test_svg_generation_saves_sanitized_cms_only_artwork(): void
+    {
+        Storage::fake('public');
+        config([
+            'services.gemini.key' => 'gemini-text-key',
+            'services.gemini.base_url' => 'https://generativelanguage.googleapis.com/v1',
+            'services.gemini.text_model' => 'gemini-3.1-flash-lite',
+        ]);
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><circle cx="300" cy="300" r="120" fill="white"/><path fill="#facc15" d="M500 100h180l-80 250h100L420 700l80-260H390z"/><rect x="120" y="720" width="780" height="60" fill="#525252"/></svg>';
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => "```svg\n{$svg}\n```"]]]]],
+            ]),
+        ]);
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create(['title' => 'Lose your keys', 'subtitle' => 'Locked outside', 'score' => 18, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)
+            ->post('/cms/cards/'.$card->id.'/generate-svg')
+            ->assertRedirect()
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'SVG illustration generated'));
+
+        $path = $card->fresh()->svg_img;
+        $this->assertStringStartsWith('cards/generated-svg/card-'.$card->id.'-', $path);
+        Storage::disk('public')->assertExists($path);
+        $storedSvg = Storage::disk('public')->get($path);
+        $this->assertStringContainsString('fill="#FFFFFF"', $storedSvg);
+        $this->assertStringContainsString('fill="#FACC15"', $storedSvg);
+        $this->assertStringNotContainsString('<script', $storedSvg);
+        $this->get('/card-images/'.$path)
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/svg+xml')
+            ->assertHeader('Content-Security-Policy', "default-src 'none'; sandbox")
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
+            && $request->hasHeader('x-goog-api-key', 'gemini-text-key')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Lose your keys')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), '<svg'));
+    }
+
+    public function test_svg_generation_rejects_executable_svg(): void
+    {
+        Storage::fake('public');
+        config([
+            'services.gemini.key' => 'gemini-text-key',
+            'services.gemini.base_url' => 'https://generativelanguage.googleapis.com/v1',
+            'services.gemini.text_model' => 'gemini-3.1-flash-lite',
+        ]);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><circle cx="50" cy="50" r="20" fill="#FFFFFF"/><path fill="#FACC15" d="M0 0h10v10z"/></svg>']]]]],
+            ]),
+        ]);
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create(['title' => 'Unsafe SVG test', 'score' => 18, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)
+            ->from('/cms/cards/'.$card->id.'/edit')
+            ->post('/cms/cards/'.$card->id.'/generate-svg')
+            ->assertRedirect('/cms/cards/'.$card->id.'/edit')
+            ->assertSessionHasErrors('generation');
+
+        $this->assertNull($card->fresh()->svg_img);
+        $this->assertSame([], Storage::disk('public')->allFiles('cards/generated-svg'));
+    }
+
     public function test_generate_action_returns_to_cms_with_a_configuration_error(): void
     {
         config(['services.openrouter.key' => null]);

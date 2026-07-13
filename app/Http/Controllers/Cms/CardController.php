@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Cms;
 use App\Http\Controllers\Controller;
 use App\Models\Card;
 use App\Models\Stack;
+use DOMDocument;
+use DOMElement;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class CardController extends Controller
@@ -59,6 +62,7 @@ class CardController extends Controller
     public function destroy(Card $card)
     {
         $this->deleteManagedImage($card->image);
+        $this->deleteManagedSvg($card->svg_img);
         $card->delete();
 
         return redirect()->route('cms.cards.index')->with('success', 'Card deleted.');
@@ -250,6 +254,198 @@ class CardController extends Controller
             ->with('generated_prompt', $prompt);
     }
 
+    public function generateSvg(Request $request, Card $card)
+    {
+        $generationId = (string) Str::uuid();
+        $model = (string) config('services.gemini.text_model');
+        $logContext = [
+            'generation_id' => $generationId,
+            'card_id' => $card->id,
+            'card_title' => $card->title,
+            'ip' => $request->ip(),
+            'model' => $model,
+        ];
+
+        if (! config('services.gemini.key')) {
+            Log::warning('CMS SVG generation stopped: Gemini key missing', $logContext);
+
+            return back()->withErrors([
+                'generation' => "GEMINI_API_KEY or FALLBACK_GEMINI_API_KEY is not configured. [Generation: {$generationId}]",
+            ]);
+        }
+
+        $prompt = $this->svgGenerationPrompt($card);
+        $url = rtrim((string) config('services.gemini.base_url'), '/')
+            .'/models/'.rawurlencode($model).':generateContent';
+
+        Log::info('CMS SVG generation sending Gemini request', $logContext + [
+            'endpoint' => $url,
+            'prompt_bytes' => strlen($prompt),
+        ]);
+
+        try {
+            $response = Http::withHeaders([
+                'x-goog-api-key' => config('services.gemini.key'),
+            ])
+                ->acceptJson()
+                ->asJson()
+                ->timeout(120)
+                ->post($url, [
+                    'systemInstruction' => [
+                        'parts' => [[
+                            'text' => 'You create safe, minimal SVG pictograms. Return only complete SVG markup with no Markdown or explanation.',
+                        ]],
+                    ],
+                    'contents' => [[
+                        'role' => 'user',
+                        'parts' => [['text' => $prompt]],
+                    ]],
+                    'generationConfig' => [
+                        'temperature' => 0.85,
+                    ],
+                ])
+                ->throw()
+                ->json();
+
+            $parts = (array) data_get($response, 'candidates.0.content.parts', []);
+            $content = implode('', array_map(
+                fn ($part) => is_string(data_get($part, 'text')) ? data_get($part, 'text') : '',
+                $parts
+            ));
+            throw_if($content === '', RuntimeException::class, 'Gemini returned no SVG code.');
+
+            $svg = $this->sanitizeGeneratedSvg($content);
+            $path = 'cards/generated-svg/card-'.$card->id.'-'.now()->format('YmdHis').'-'.Str::lower(Str::random(6)).'.svg';
+            Storage::disk('public')->put($path, $svg);
+            abort_unless(Storage::disk('public')->exists($path), 500, 'Generated SVG was not found after writing it to storage.');
+            $this->deleteManagedSvg($card->svg_img);
+            $card->update(['svg_img' => $path]);
+        } catch (Throwable $error) {
+            $message = $error instanceof RequestException
+                ? (string) data_get($error->response?->json(), 'error.message', $error->getMessage())
+                : ($error->getMessage() ?: 'SVG generation failed.');
+            Log::error('CMS SVG generation failed', $logContext + [
+                'exception' => $error,
+                'provider_status' => $error instanceof RequestException ? $error->response?->status() : null,
+            ]);
+
+            return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
+        }
+
+        Log::info('CMS SVG generation completed', $logContext + [
+            'storage_path' => $path,
+            'svg_bytes' => strlen($svg),
+        ]);
+
+        return back()
+            ->with('success', "SVG illustration generated with Gemini and saved. [Generation: {$generationId}]")
+            ->with('generated_svg_prompt', $prompt);
+    }
+
+    private function svgGenerationPrompt(Card $card): string
+    {
+        return implode("\n", [
+            'Create a custom SVG pictogram for this Misery Meter game card.',
+            "Situation: {$card->title}",
+            $card->subtitle ? "Context: {$card->subtitle}" : '',
+            'First reason silently whether the scene needs one, two, or three people, then depict the smallest cast that clearly communicates the event.',
+            'Be creative and situation-specific. The result must remain instantly readable at small mobile-card size.',
+            'Use viewBox="0 0 1024 1024", width="1024", height="1024", and a fully transparent background.',
+            'Use only solid filled, simple vector shapes. Main people must be pure white #FFFFFF. The misery event or hazard must be amber #FACC15. Minimal environmental grounding may use only #262626 or #525252.',
+            'Include both a substantial white person and a substantial amber event element. Never make people amber or the main hazard white.',
+            'Keep the environment simple and connected to the action so nothing appears to float.',
+            'Allowed SVG elements only: svg, g, path, circle, rect, ellipse, polygon, polyline.',
+            'Allowed styling only through fill, fill-rule, clip-rule, transform, and opacity attributes. No style tags or style attributes.',
+            'Do not use text, fonts, stroke, line art, gradients, filters, masks, clip paths, patterns, images, data URLs, external links, CSS, scripts, animation, IDs, classes, event handlers, metadata, comments, or embedded resources.',
+            'Keep the SVG under 100 KB and use a small number of clean geometric shapes.',
+            'Return only the complete <svg>...</svg> markup without a code fence or explanation.',
+            '',
+            'Use this existing mascot SVG markup only as a visual-language and proportion reference. Adapt the pose; do not copy it as the final scene:',
+            $this->silhouetteSvg(),
+        ]);
+    }
+
+    private function sanitizeGeneratedSvg(string $content): string
+    {
+        $svg = trim(preg_replace('/^```(?:svg|xml)?\s*|\s*```$/i', '', trim($content)) ?? trim($content));
+        throw_if($svg === '' || strlen($svg) > 102400, RuntimeException::class, 'Generated SVG is empty or larger than 100 KB.');
+        throw_if(str_contains($svg, '<!DOCTYPE'), RuntimeException::class, 'Generated SVG contains a forbidden document type.');
+
+        $previousLibxmlErrors = libxml_use_internal_errors(true);
+        $document = new DOMDocument('1.0', 'UTF-8');
+        $loaded = $document->loadXML($svg, LIBXML_NONET | LIBXML_NOBLANKS | LIBXML_NOERROR | LIBXML_NOWARNING);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlErrors);
+
+        throw_unless($loaded && $document->documentElement instanceof DOMElement, RuntimeException::class, 'Gemini returned invalid SVG XML.');
+        $root = $document->documentElement;
+        throw_unless($root->localName === 'svg' && $root->namespaceURI === 'http://www.w3.org/2000/svg', RuntimeException::class, 'Generated file is not a valid SVG document.');
+
+        $allowedElements = ['svg', 'g', 'path', 'circle', 'rect', 'ellipse', 'polygon', 'polyline'];
+        $allowedAttributes = [
+            'xmlns', 'viewBox', 'width', 'height', 'preserveAspectRatio',
+            'x', 'y', 'cx', 'cy', 'r', 'rx', 'ry', 'points', 'd',
+            'fill', 'fill-rule', 'clip-rule', 'transform', 'opacity',
+        ];
+        $fillMap = [
+            '#fff' => '#FFFFFF', '#ffffff' => '#FFFFFF', 'white' => '#FFFFFF',
+            '#facc15' => '#FACC15', '#262626' => '#262626', '#525252' => '#525252',
+            'none' => 'none', 'transparent' => 'none',
+        ];
+        $shapeCount = 0;
+        $usedFills = [];
+
+        foreach (iterator_to_array($document->getElementsByTagName('*')) as $element) {
+            throw_unless(in_array($element->localName, $allowedElements, true), RuntimeException::class, "Generated SVG contains forbidden <{$element->localName}> element.");
+            if ($element->localName !== 'svg' && $element->localName !== 'g') {
+                $shapeCount++;
+            }
+
+            foreach (iterator_to_array($element->attributes ?? []) as $attribute) {
+                $name = $attribute->nodeName;
+                $value = trim($attribute->nodeValue ?? '');
+                throw_unless(in_array($name, $allowedAttributes, true), RuntimeException::class, "Generated SVG contains forbidden {$name} attribute.");
+                throw_if(str_starts_with(strtolower($name), 'on') || preg_match('/javascript:|data:|url\s*\(/i', $value), RuntimeException::class, 'Generated SVG contains an unsafe attribute value.');
+
+                if ($name === 'fill') {
+                    $normalizedFill = $fillMap[strtolower($value)] ?? null;
+                    throw_unless($normalizedFill !== null, RuntimeException::class, "Generated SVG uses forbidden fill color {$value}.");
+                    $element->setAttribute('fill', $normalizedFill);
+                    $usedFills[$normalizedFill] = true;
+                }
+            }
+
+            if ($element->localName !== 'svg' && $element->localName !== 'g') {
+                $fillSource = $element;
+                while ($fillSource instanceof DOMElement && ! $fillSource->hasAttribute('fill')) {
+                    $fillSource = $fillSource->parentNode;
+                }
+                $resolvedFill = $fillSource instanceof DOMElement ? $fillSource->getAttribute('fill') : '';
+                throw_if($resolvedFill === '' || $resolvedFill === 'none', RuntimeException::class, 'Every generated SVG shape must have an allowed solid fill.');
+            }
+        }
+
+        foreach ($document->getElementsByTagName('*') as $element) {
+            foreach ($element->childNodes as $child) {
+                throw_if($child->nodeType === XML_TEXT_NODE && trim($child->nodeValue ?? '') !== '', RuntimeException::class, 'Generated SVG contains forbidden text content.');
+                throw_if(! in_array($child->nodeType, [XML_ELEMENT_NODE, XML_TEXT_NODE], true), RuntimeException::class, 'Generated SVG contains forbidden comments or processing instructions.');
+            }
+        }
+
+        throw_if($shapeCount === 0, RuntimeException::class, 'Generated SVG contains no visible shapes.');
+        throw_unless(isset($usedFills['#FFFFFF'], $usedFills['#FACC15']), RuntimeException::class, 'Generated SVG must contain both white people and an amber event element.');
+
+        $root->setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        $root->setAttribute('viewBox', '0 0 1024 1024');
+        $root->setAttribute('width', '1024');
+        $root->setAttribute('height', '1024');
+
+        $safeSvg = $document->saveXML($root);
+        throw_unless(is_string($safeSvg) && $safeSvg !== '', RuntimeException::class, 'Generated SVG could not be serialized.');
+
+        return $safeSvg;
+    }
+
     private function isInsufficientCreditError(RequestException $error, string $message): bool
     {
         if ($error->response?->status() === 402) {
@@ -404,6 +600,13 @@ class CardController extends Controller
     {
         if ($path && ! Str::startsWith($path, ['http://', 'https://']) && $path !== '0') {
             Storage::disk('public')->delete(preg_replace('#^storage/#', '', ltrim($path, '/')));
+        }
+    }
+
+    private function deleteManagedSvg(?string $path): void
+    {
+        if ($path && Str::startsWith($path, 'cards/generated-svg/')) {
+            Storage::disk('public')->delete($path);
         }
     }
 }

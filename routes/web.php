@@ -48,16 +48,23 @@ Route::view('/simulator', 'play')->middleware('cms.auth')->name('simulator');
 Route::get('/card-images/{path}', function (string $path) {
     abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
     abort_unless(Storage::disk('public')->exists($path), 404);
-
-    return response()->file(Storage::disk('public')->path($path), [
+    $mimeType = Storage::disk('public')->mimeType($path) ?: (str_ends_with($path, '.svg') ? 'image/svg+xml' : 'image/png');
+    $headers = [
         'Cache-Control' => 'public, max-age=31536000, immutable',
-        'Content-Type' => Storage::disk('public')->mimeType($path) ?: 'image/png',
-    ]);
+        'Content-Type' => $mimeType,
+        'X-Content-Type-Options' => 'nosniff',
+    ];
+    if ($mimeType === 'image/svg+xml') {
+        $headers['Content-Security-Policy'] = "default-src 'none'; sandbox";
+    }
+
+    return response()->file(Storage::disk('public')->path($path), $headers);
 })->where('path', '.+')->name('card-images.show');
 Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::view('/', 'cms.home')->name('home');
     Route::resource('cards', CmsCardController::class)->except('show');
     Route::post('cards/{card}/generate', [CmsCardController::class, 'generate'])->name('cards.generate');
+    Route::post('cards/{card}/generate-svg', [CmsCardController::class, 'generateSvg'])->name('cards.generate-svg');
     Route::get('questions/generate-ai', [CmsQuestionController::class, 'generateForm'])->name('questions.generate-form');
     Route::post('questions/generate-ai', [CmsQuestionController::class, 'generate'])->name('questions.generate');
     Route::resource('questions', CmsQuestionController::class)->except('show');
