@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="412" height="1208" viewBox="0 0 412 1208" role="img" aria-labelledby="title description">
+  <title id="title">Misery Meter main silhouette</title>
+  <desc id="description">An anonymous solid-white person beneath a solid amber lightning bolt.</desc>
+  <path fill="#FACC15" d="M362 0H187l-80 248h91l-51 185 199-257H242L362 0Z"/>
+  <path fill="#FACC15" d="m317 317-61 71 9 7 24-19-5 34 9 7 35-5-27 34 33 20-36 18 10 7 92-18-72-31 57-67-80 23 13-77-1-4Z"/>
+  <circle cx="155" cy="478" r="88" fill="#FFFFFF"/>
+  <path fill="#FFFFFF" d="M69 580c-35 8-59 40-59 78v177c0 15 11 26 26 26s26-11 26-26V704c0-9 5-15 11-15s10 6 10 15v463c0 18 14 31 32 31s33-13 33-31V910c0-9 5-15 11-15s11 6 11 15v255c0 19 15 33 34 33s33-14 33-33V704c0-9 5-15 11-15s10 6 10 15v131c0 15 11 26 26 26s26-11 26-26V658c0-38-25-70-60-78H69Z"/>
+</svg>

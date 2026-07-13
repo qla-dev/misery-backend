@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
 
 class CardController extends Controller
 {
@@ -64,7 +65,9 @@ class CardController extends Controller
 
     public function generate(Card $card)
     {
-        abort_unless(config('services.openrouter.key'), 422, 'OPENROUTER_API_KEY is not configured on the backend.');
+        if (! config('services.openrouter.key')) {
+            return back()->withErrors(['generation' => 'OPENROUTER_API_KEY is not configured on the backend.']);
+        }
         $prompt = implode("\n", [
             'Use case: stylized-concept',
             'Asset type: transparent illustration for a Misery Index game card',
@@ -111,25 +114,35 @@ class CardController extends Controller
                 ])->throw()->json();
         } catch (RequestException $error) {
             return back()->withErrors(['generation' => data_get($error->response?->json(), 'error.message', $error->getMessage())]);
+        } catch (Throwable $error) {
+            report($error);
+
+            return back()->withErrors(['generation' => $error->getMessage() ?: 'Artwork generation could not be started.']);
         }
 
-        $encoded = data_get($response, 'data.0.b64_json');
-        abort_unless($encoded, 502, 'Image provider returned no image data.');
-        $path = 'cards/generated/card-'.$card->id.'-'.now()->format('YmdHis').'.png';
-        $png = base64_decode($encoded, true);
-        abort_unless($png !== false, 502, 'Image provider returned invalid image data.');
-        $png = $this->optimizeGeneratedPng($png);
-        abort_if(strlen($png) > self::MAX_GENERATED_PNG_BYTES, 502, 'Generated PNG is larger than 100 KB after optimization. Please generate it again.');
-        Storage::disk('public')->put($path, $png);
-        $this->deleteManagedImage($card->image);
-        $card->update(['image' => $path]);
+        try {
+            $encoded = data_get($response, 'data.0.b64_json');
+            abort_unless($encoded, 502, 'Image provider returned no image data.');
+            $path = 'cards/generated/card-'.$card->id.'-'.now()->format('YmdHis').'.png';
+            $png = base64_decode($encoded, true);
+            abort_unless($png !== false, 502, 'Image provider returned invalid image data.');
+            $png = $this->optimizeGeneratedPng($png);
+            abort_if(strlen($png) > self::MAX_GENERATED_PNG_BYTES, 502, 'Generated PNG is larger than 100 KB after optimization. Please generate it again.');
+            Storage::disk('public')->put($path, $png);
+            $this->deleteManagedImage($card->image);
+            $card->update(['image' => $path]);
+        } catch (Throwable $error) {
+            report($error);
+
+            return back()->withErrors(['generation' => $error->getMessage() ?: 'Generated artwork could not be saved.']);
+        }
 
         return back()->with('success', 'Transparent artwork generated and saved.')->with('generated_prompt', $prompt);
     }
 
     private function silhouetteReferences(): array
     {
-        $path = base_path('../frontend/assets/images/i-letter.svg');
+        $path = resource_path('ai/main-silhouette.svg');
         abort_unless(is_file($path), 500, 'Main silhouette reference SVG is missing.');
         $svg = file_get_contents($path);
         abort_unless($svg !== false && $svg !== '', 500, 'Main silhouette reference SVG could not be read.');
