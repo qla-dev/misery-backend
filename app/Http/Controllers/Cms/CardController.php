@@ -79,6 +79,7 @@ class CardController extends Controller
         Log::info('CMS artwork generation clicked', $logContext + [
             'referer' => $request->headers->get('referer'),
             'openrouter_configured' => filled(config('services.openrouter.key')),
+            'gemini_fallback_configured' => filled(config('services.gemini_fallback.key')),
             'provider_url' => rtrim((string) config('services.openrouter.base_url'), '/').'/images',
         ]);
 
@@ -112,6 +113,7 @@ class CardController extends Controller
             'Constraints: PNG; crisp edges; no text, letters, numbers, logos, watermark, card frame, border, gradients, lighting effects, or shadows. Apart from white, amber, and the explicitly permitted neutral environment grays, use no other colors.',
         ]);
 
+        $providerUsed = 'openrouter';
         try {
             $headers = array_filter([
                 'HTTP-Referer' => config('services.openrouter.http_referer'),
@@ -157,7 +159,41 @@ class CardController extends Controller
                 'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
-            return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
+            if (! $this->isInsufficientCreditError($error, $message)) {
+                return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
+            }
+
+            if (! config('services.gemini_fallback.key')) {
+                Log::warning('CMS artwork Gemini fallback unavailable: API key missing', $logContext);
+
+                return back()->withErrors([
+                    'generation' => $message." Gemini fallback is not configured; add FALLBACK_GEMINI_API_KEY. [Generation: {$generationId}]",
+                ]);
+            }
+
+            Log::warning('CMS artwork switching to direct Gemini fallback', $logContext + [
+                'openrouter_status' => $error->response?->status(),
+                'gemini_model' => config('services.gemini_fallback.image_model'),
+            ]);
+
+            try {
+                $response = $this->generateWithGemini($prompt, $logContext);
+                $providerUsed = 'gemini-fallback';
+            } catch (Throwable $fallbackError) {
+                $fallbackMessage = $fallbackError instanceof RequestException
+                    ? (string) data_get($fallbackError->response?->json(), 'error.message', $fallbackError->getMessage())
+                    : $fallbackError->getMessage();
+                Log::error('CMS artwork direct Gemini fallback failed', $logContext + [
+                    'exception' => $fallbackError,
+                    'gemini_status' => $fallbackError instanceof RequestException ? $fallbackError->response?->status() : null,
+                    'gemini_error' => Str::limit($fallbackMessage ?: 'Unknown Gemini error', 2000),
+                    'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                ]);
+
+                return back()->withErrors([
+                    'generation' => 'OpenRouter has insufficient credit and Gemini fallback failed: '.($fallbackMessage ?: 'Unknown Gemini error')." [Generation: {$generationId}]",
+                ]);
+            }
         } catch (Throwable $error) {
             Log::error('CMS artwork generation could not start', $logContext + [
                 'exception' => $error,
@@ -205,20 +241,96 @@ class CardController extends Controller
 
         Log::info('CMS artwork generation completed', $logContext + [
             'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'provider' => $providerUsed,
             'storage_path' => $path,
         ]);
 
         return back()
-            ->with('success', "Transparent artwork generated and saved. [Generation: {$generationId}]")
+            ->with('success', 'Transparent artwork generated and saved via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').". [Generation: {$generationId}]")
             ->with('generated_prompt', $prompt);
+    }
+
+    private function isInsufficientCreditError(RequestException $error, string $message): bool
+    {
+        if ($error->response?->status() === 402) {
+            return true;
+        }
+
+        $haystack = Str::lower($message.' '.json_encode($error->response?->json()));
+
+        return Str::contains($haystack, [
+            'insufficient credit',
+            'insufficient funds',
+            'not enough credit',
+            'credit balance',
+        ]);
+    }
+
+    private function generateWithGemini(string $prompt, array $logContext): array
+    {
+        $model = (string) config('services.gemini_fallback.image_model');
+        $url = rtrim((string) config('services.gemini_fallback.base_url'), '/')
+            .'/models/'.rawurlencode($model).':generateContent';
+        $svg = $this->silhouetteSvg();
+
+        Log::info('CMS artwork sending direct Gemini fallback request', $logContext + [
+            'gemini_model' => $model,
+            'gemini_url' => $url,
+            'prompt_bytes' => strlen($prompt),
+            'reference_svg_bytes' => strlen($svg),
+        ]);
+
+        $geminiResponse = Http::withHeaders([
+            'x-goog-api-key' => config('services.gemini_fallback.key'),
+        ])
+            ->acceptJson()
+            ->asJson()
+            ->timeout(180)
+            ->post($url, [
+                'contents' => [[
+                    'role' => 'user',
+                    'parts' => [
+                        ['text' => $prompt],
+                        ['text' => "Required main-silhouette visual reference, supplied as SVG markup. Preserve its anonymous safety-sign proportions and color roles while adapting the pose:\n{$svg}"],
+                    ],
+                ]],
+                'generationConfig' => [
+                    'responseModalities' => ['IMAGE'],
+                    'responseFormat' => [
+                        'image' => [
+                            'aspectRatio' => '1:1',
+                            'imageSize' => '1K',
+                        ],
+                    ],
+                ],
+            ]);
+
+        Log::info('CMS artwork direct Gemini fallback responded', $logContext + [
+            'gemini_status' => $geminiResponse->status(),
+            'gemini_content_type' => $geminiResponse->header('Content-Type'),
+            'gemini_response_bytes' => strlen($geminiResponse->body()),
+            'gemini_error' => $geminiResponse->successful()
+                ? null
+                : Str::limit((string) data_get($geminiResponse->json(), 'error.message', $geminiResponse->body()), 2000),
+        ]);
+
+        $body = $geminiResponse->throw()->json();
+        $encoded = null;
+        foreach ((array) data_get($body, 'candidates.0.content.parts', []) as $part) {
+            $candidate = data_get($part, 'inlineData.data') ?? data_get($part, 'inline_data.data');
+            if (is_string($candidate) && $candidate !== '') {
+                $encoded = $candidate;
+            }
+        }
+
+        abort_unless($encoded, 502, 'Gemini fallback returned no image data.');
+
+        return ['data' => [['b64_json' => $encoded]]];
     }
 
     private function silhouetteReferences(): array
     {
-        $path = resource_path('ai/main-silhouette.svg');
-        abort_unless(is_file($path), 500, 'Main silhouette reference SVG is missing.');
-        $svg = file_get_contents($path);
-        abort_unless($svg !== false && $svg !== '', 500, 'Main silhouette reference SVG could not be read.');
+        $svg = $this->silhouetteSvg();
 
         return [[
             'type' => 'image_url',
@@ -226,6 +338,16 @@ class CardController extends Controller
                 'url' => 'data:image/svg+xml;base64,'.base64_encode($svg),
             ],
         ]];
+    }
+
+    private function silhouetteSvg(): string
+    {
+        $path = resource_path('ai/main-silhouette.svg');
+        abort_unless(is_file($path), 500, 'Main silhouette reference SVG is missing.');
+        $svg = file_get_contents($path);
+        abort_unless($svg !== false && $svg !== '', 500, 'Main silhouette reference SVG could not be read.');
+
+        return $svg;
     }
 
     private function optimizeGeneratedPng(string $png): string

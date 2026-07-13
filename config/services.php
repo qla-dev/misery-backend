@@ -31,6 +31,12 @@ return [
         'text_model' => env('OPENROUTER_TEXT_MODEL', 'openai/gpt-4.1-mini'),
     ],
 
+    'gemini_fallback' => [
+        'key' => env('FALLBACK_GEMINI_API_KEY'),
+        'base_url' => env('FALLBACK_GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1'),
+        'image_model' => env('FALLBACK_GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image'),
+    ],
+
     'google' => [
         'client_ids' => array_values(array_filter(array_map(
             'trim',

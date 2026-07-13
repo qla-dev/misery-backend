@@ -79,6 +79,55 @@ class CmsTest extends TestCase
         });
     }
 
+    public function test_generate_action_falls_back_to_direct_gemini_when_openrouter_has_insufficient_credit(): void
+    {
+        Storage::fake('public');
+        config([
+            'services.openrouter.key' => 'openrouter-test-key',
+            'services.openrouter.base_url' => 'https://openrouter.ai/api/v1',
+            'services.gemini_fallback.key' => 'gemini-test-key',
+            'services.gemini_fallback.base_url' => 'https://generativelanguage.googleapis.com/v1',
+            'services.gemini_fallback.image_model' => 'gemini-3.1-flash-image',
+        ]);
+        Http::fake([
+            'openrouter.ai/*' => Http::response(['error' => ['message' => 'Insufficient credits']], 402),
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [[
+                    'content' => [
+                        'parts' => [[
+                            'inlineData' => [
+                                'mimeType' => 'image/png',
+                                'data' => base64_encode('gemini-png-bytes'),
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]),
+        ]);
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create(['title' => 'Flat tire', 'subtitle' => 'In heavy rain', 'score' => 12, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)
+            ->post('/cms/cards/'.$card->id.'/generate')
+            ->assertRedirect()
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'direct Gemini fallback'));
+
+        Storage::disk('public')->assertExists($card->fresh()->image);
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), 'generativelanguage.googleapis.com')) {
+                return false;
+            }
+
+            return $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent'
+                && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
+                && $request['generationConfig']['responseModalities'] === ['IMAGE']
+                && $request['generationConfig']['responseFormat']['image']['aspectRatio'] === '1:1'
+                && $request['generationConfig']['responseFormat']['image']['imageSize'] === '1K'
+                && str_contains($request['contents'][0]['parts'][1]['text'], '<svg');
+        });
+    }
+
     public function test_generate_action_returns_to_cms_with_a_configuration_error(): void
     {
         config(['services.openrouter.key' => null]);
