@@ -6,6 +6,31 @@ use App\Http\Controllers\Cms\StackController as CmsStackController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
+Route::get('/.well-known/apple-app-site-association', function () {
+    return response()->json([
+        'applinks' => ['details' => [[
+            'appIDs' => [config('game.ios_app_team_id').'.misery.qla.dev'],
+            'components' => [['/' => '/code/*']],
+        ]]],
+    ])->header('Content-Type', 'application/json');
+});
+Route::get('/.well-known/assetlinks.json', function () {
+    return response()->json([[
+        'relation' => ['delegate_permission/common.handle_all_urls'],
+        'target' => [
+            'namespace' => 'android_app',
+            'package_name' => 'misery.qla.dev',
+            'sha256_cert_fingerprints' => config('game.android_app_sha256_cert_fingerprints'),
+        ],
+    ]])->header('Content-Type', 'application/json');
+});
+Route::get('/code/{code}', function (string $code) {
+    $code = strtoupper($code);
+    abort_unless((bool) preg_match('/^(?=(?:.*[A-Z]){4})(?=(?:.*\d){4})[A-Z\d]{8}$/', $code), 404);
+
+    return view('deep-link', compact('code'));
+});
+
 Route::get('/', fn () => response()->file(public_path('dist/index.html')));
 Route::get('/cookies', fn () => response()->file(public_path('dist/cookies/index.html')));
 Route::get('/privacy', fn () => response()->file(public_path('dist/privacy/index.html')));

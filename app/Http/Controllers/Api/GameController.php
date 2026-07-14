@@ -73,7 +73,7 @@ class GameController extends Controller
     public function index()
     {
         return GameResource::collection(
-            Game::where('started', false)->with('members')->withCount('members')->having('members_count', '<', 8)->latest()->get()
+            Game::where('started', false)->with('members')->has('members', '<', config('game.max_players'))->latest()->get()
         );
     }
 
@@ -140,7 +140,7 @@ class GameController extends Controller
         return DB::transaction(function () use ($data, $code) {
             $game = Game::where('code', strtoupper($code))->lockForUpdate()->firstOrFail();
             abort_if($game->started, 422, 'Game already started.');
-            abort_if($game->members()->count() >= 8, 422, 'No more available seats in this room.');
+            abort_if($game->members()->count() >= config('game.max_players'), 422, 'No more available seats in this room.');
             $used = $game->members()->pluck('color')->filter()->all();
             $requested = $data['color'] ?? self::COLORS[0];
             $data['color'] = in_array($requested, $used, true) ? collect(self::COLORS)->first(fn ($color) => ! in_array($color, $used, true)) : $requested;
