@@ -59,10 +59,11 @@ class CmsTest extends TestCase
             && $request['quality'] === 'high'
             && $request['background'] === 'opaque'
             && $request['output_format'] === 'jpeg'
-            && count($request['input_references']) === 4
+            && count($request['input_references']) === 5
             && str_starts_with($request['input_references'][1]['image_url']['url'], 'data:image/jpeg;base64,')
             && str_starts_with($request['input_references'][2]['image_url']['url'], 'data:image/jpeg;base64,')
             && str_starts_with($request['input_references'][3]['image_url']['url'], 'data:image/jpeg;base64,')
+            && str_starts_with($request['input_references'][4]['image_url']['url'], 'data:image/jpeg;base64,')
             && str_starts_with($reference, 'data:image/png;base64,')
             && is_string($referencePng)
             && str_starts_with($referencePng, "\x89PNG\r\n\x1a\n")
@@ -90,6 +91,9 @@ class CmsTest extends TestCase
             && str_contains($request['prompt'], 'Never use a huge foreground block, podium, platform slab')
             && str_contains($request['prompt'], 'fills and visually balances the entire square')
             && str_contains($request['prompt'], 'always include meaningful scene-specific background')
+            && str_contains($request['prompt'], 'Three-part composition recipe')
+            && str_contains($request['prompt'], 'closely follow the attached good-example image for scale, staging, visual hierarchy')
+            && str_contains($request['prompt'], 'ignore and omit its timer display, digits')
             && str_contains($request['prompt'], 'no words, letters, numbers, digits, decimal points, scores')
             && str_contains($request['prompt'], 'never depict a finished game card, card shell')
             && str_contains($request['prompt'], 'exactly these three colors')
@@ -145,8 +149,9 @@ class CmsTest extends TestCase
                 && $request['generationConfig']['imageConfig']['imageSize'] === '2K'
                 && $request['contents'][0]['parts'][2]['inlineData']['mimeType'] === 'image/png'
                 && $request['contents'][0]['parts'][4]['inlineData']['mimeType'] === 'image/jpeg'
-                && $request['contents'][0]['parts'][5]['inlineData']['mimeType'] === 'image/jpeg'
-                && $request['contents'][0]['parts'][6]['inlineData']['mimeType'] === 'image/jpeg';
+                && $request['contents'][0]['parts'][6]['inlineData']['mimeType'] === 'image/jpeg'
+                && $request['contents'][0]['parts'][7]['inlineData']['mimeType'] === 'image/jpeg'
+                && $request['contents'][0]['parts'][8]['inlineData']['mimeType'] === 'image/jpeg';
         });
     }
 

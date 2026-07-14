@@ -122,6 +122,9 @@ class CardController extends Controller
             'Full-canvas composition: build a complete environment that fills and visually balances the entire square, including foreground, middle ground, background, left side, right side, upper area, and lower area. Do not leave the people isolated in a mostly empty black void.',
             'Background content: always include meaningful scene-specific background and environmental context using black negative space plus amber shapes. Distribute useful details around the action so the image feels complete and immersive, while keeping the two people as the clear focal point.',
             'Composition density: use the canvas confidently with large, readable subjects and supporting context across the frame. Avoid excessive empty space, tiny centered subjects, sparse icon layouts, clutter, and decorative filler. Keep all elements part of one unified scene.',
+            'Three-part composition recipe: structure every image around (1) one dominant main victim, (2) one clearly readable secondary character reacting or participating, and (3) one large grounded event object or environmental cluster that explains the misery. These three parts must overlap or connect naturally as one scene and fill the frame with strong visual balance.',
+            'Primary composition reference: closely follow the attached good-example image for scale, staging, visual hierarchy, grounded props, diagonal balance, bold use of the frame, and the relationship between a large person and a large event object. Use its composition principles, not its literal content.',
+            'Do not copy from the good example: ignore and omit its timer display, digits, warning symbol, appliance, laundry, exact pose, exact object shapes, and one-person cast. Replace its content with the current situation and the required two-character hierarchy.',
             'Background geometry is mandatory: fill the entire square canvas with opaque pure black #000000, including all four corners and every pixel along all four outer edges.',
             'Never place the scene inside a rounded rectangle, rounded card, inset panel, container, vignette, mask, frame, or tile. Never round, clip, soften, curve, bevel, or cut off the canvas corners.',
             'The four canvas corners must be square and pure black. There must be no white corner wedges, margin, padding outside the black background, visible outer canvas, transparency, alpha, checkerboard pattern, border, or contrasting area around the black scene.',
@@ -474,6 +477,7 @@ class CardController extends Controller
         $url = rtrim((string) config('services.gemini_fallback.base_url'), '/')
             .'/models/'.rawurlencode($model).':generateContent';
         $reference = $this->silhouettePng();
+        $compositionReference = $this->compositionReferenceImage();
         $styleReferences = $this->styleReferenceImages();
         $parts = [
             ['text' => $prompt],
@@ -481,6 +485,11 @@ class CardController extends Controller
             ['inlineData' => [
                 'mimeType' => 'image/png',
                 'data' => base64_encode($reference),
+            ]],
+            ['text' => 'The next JPEG is the primary composition reference. Follow only its scale, hierarchy, grounding, frame coverage, and spatial balance. Do not copy its digits, timer, warning icon, appliance, laundry, literal content, or one-person cast.'],
+            ['inlineData' => [
+                'mimeType' => 'image/jpeg',
+                'data' => base64_encode($compositionReference),
             ]],
             ['text' => 'The next three images are style references only. Learn their bold pictogram readability and visual storytelling, but do not copy their compositions, text, frames, corners, backgrounds, white platforms, floating props, disconnected icons, or extra colors. Follow the prompt’s physical grounding and color-role rules instead.'],
         ];
@@ -496,6 +505,7 @@ class CardController extends Controller
             'gemini_url' => $url,
             'prompt_bytes' => strlen($prompt),
             'reference_png_bytes' => strlen($reference),
+            'composition_reference_bytes' => strlen($compositionReference),
             'style_reference_count' => count($styleReferences),
         ]);
 
@@ -552,6 +562,13 @@ class CardController extends Controller
             ],
         ]];
 
+        $references[] = [
+            'type' => 'image_url',
+            'image_url' => [
+                'url' => 'data:image/jpeg;base64,'.base64_encode($this->compositionReferenceImage()),
+            ],
+        ];
+
         foreach ($this->styleReferenceImages() as $styleReference) {
             $references[] = [
                 'type' => 'image_url',
@@ -562,6 +579,16 @@ class CardController extends Controller
         }
 
         return $references;
+    }
+
+    private function compositionReferenceImage(): string
+    {
+        $path = resource_path('ai/composition-reference.jpg');
+        abort_unless(is_file($path), 500, 'Primary composition reference is missing.');
+        $jpeg = file_get_contents($path);
+        abort_unless($jpeg !== false && $jpeg !== '', 500, 'Primary composition reference could not be read.');
+
+        return $jpeg;
     }
 
     private function styleReferenceImages(): array
