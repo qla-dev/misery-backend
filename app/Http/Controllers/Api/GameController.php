@@ -35,6 +35,109 @@ class GameController extends Controller
         return $memberIds[(($index === false ? 0 : $index + 1) % count($memberIds))];
     }
 
+    private function nextRemainingMemberId(array $originalMemberIds, array $remainingMemberIds, int $currentId): int
+    {
+        $currentIndex = array_search($currentId, $originalMemberIds, true);
+        $count = count($originalMemberIds);
+        for ($offset = 1; $offset <= $count; $offset++) {
+            $candidate = $originalMemberIds[(($currentIndex === false ? -1 : $currentIndex) + $offset) % $count];
+            if (in_array($candidate, $remainingMemberIds, true)) return $candidate;
+        }
+
+        return $remainingMemberIds[0];
+    }
+
+    private function terminateGame(Game $game, string $reason): void
+    {
+        $game->update([
+            'terminated_at' => now(),
+            'termination_reason' => $reason,
+            'host_in_lobby' => false,
+            'current_player_id' => null,
+            'turn_owner_id' => null,
+            'awaiting_finish' => false,
+            'is_steal_turn' => false,
+        ]);
+        DB::table('members')->where('game_id', $game->id)->delete();
+        Log::info('Game terminated', ['game_id' => $game->id, 'reason' => $reason]);
+    }
+
+    private function normalizeAfterMembersRemoved(Game $game, array $originalMemberIds, array $removedMemberIds): void
+    {
+        DB::table('game_cards')->where('game_id', $game->id)->whereIn('user_id', $removedMemberIds)->delete();
+        $remaining = $this->memberIds($game);
+        if (! $remaining) {
+            $game->update(['current_player_id' => null, 'turn_owner_id' => null, 'awaiting_finish' => false, 'is_steal_turn' => false]);
+            return;
+        }
+
+        $currentId = (int) $game->current_player_id;
+        $ownerId = (int) $game->turn_owner_id;
+        $currentRemoved = in_array($currentId, $removedMemberIds, true);
+        $ownerRemoved = in_array($ownerId, $removedMemberIds, true);
+        if (! $currentRemoved && ! $ownerRemoved) return;
+
+        if ($ownerRemoved || ! $game->is_steal_turn) {
+            $nextOwnerId = $this->nextRemainingMemberId($originalMemberIds, $remaining, $ownerId ?: $currentId);
+            if ($game->started) $this->drawNextCard($game);
+            $game->current_player_id = $nextOwnerId;
+            $game->turn_owner_id = $nextOwnerId;
+            $game->is_steal_turn = false;
+        } else {
+            $nextActorId = $this->nextRemainingMemberId($originalMemberIds, $remaining, $currentId);
+            if ($nextActorId === $ownerId) {
+                $nextOwnerId = $this->nextRemainingMemberId($originalMemberIds, $remaining, $ownerId);
+                if ($game->started) $this->drawNextCard($game);
+                $game->current_player_id = $nextOwnerId;
+                $game->turn_owner_id = $nextOwnerId;
+                $game->is_steal_turn = false;
+            } else {
+                $game->current_player_id = $nextActorId;
+                $game->is_steal_turn = true;
+            }
+        }
+        $game->awaiting_finish = false;
+        $game->save();
+    }
+
+    private function refreshPresence(Game $game, int $requestingUserId): Game
+    {
+        return DB::transaction(function () use ($game, $requestingUserId) {
+            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            if ($game->terminated_at) return $game;
+
+            $originalMemberIds = $this->memberIds($game);
+            $cutoff = now()->subSeconds(config('game.member_inactivity_timeout_seconds'));
+            $inactiveIds = DB::table('members')
+                ->where('game_id', $game->id)
+                ->where('updated_at', '<', $cutoff)
+                ->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+
+            if (in_array((int) $game->owner_id, $inactiveIds, true)) {
+                $this->terminateGame($game, 'host_inactive');
+                return $game->refresh();
+            }
+
+            if ($inactiveIds) {
+                DB::table('members')->where('game_id', $game->id)->whereIn('user_id', $inactiveIds)->delete();
+                $this->normalizeAfterMembersRemoved($game, $originalMemberIds, $inactiveIds);
+                Log::info('Inactive game members removed', ['game_id' => $game->id, 'user_ids' => $inactiveIds]);
+            }
+
+            DB::table('members')
+                ->where('game_id', $game->id)
+                ->where('user_id', $requestingUserId)
+                ->update(['updated_at' => now()]);
+
+            return $game->refresh();
+        });
+    }
+
+    private function ensurePlayable(Game $game): void
+    {
+        abort_if($game->terminated_at, 410, 'This game was ended by the host.');
+    }
+
     private function drawNextCard(Game $game): void
     {
         $used = DB::table('game_cards')->where('game_id', $game->id)->pluck('card_id');
@@ -73,7 +176,7 @@ class GameController extends Controller
     public function index()
     {
         return GameResource::collection(
-            Game::where('started', false)->with('members')->has('members', '<', config('game.max_players'))->latest()->get()
+            Game::where('started', false)->whereNull('terminated_at')->with('members')->has('members', '<', config('game.max_players'))->latest()->get()
         );
     }
 
@@ -100,8 +203,10 @@ class GameController extends Controller
         });
     }
 
-    public function show(Game $game)
+    public function show(Request $request, Game $game)
     {
+        $data = $request->validate(['user_id' => 'nullable|integer']);
+        if (isset($data['user_id'])) $game = $this->refreshPresence($game, (int) $data['user_id']);
         return $this->full($game);
     }
 
@@ -139,6 +244,7 @@ class GameController extends Controller
 
         return DB::transaction(function () use ($data, $code) {
             $game = Game::where('code', strtoupper($code))->lockForUpdate()->firstOrFail();
+            $this->ensurePlayable($game);
             abort_if($game->started, 422, 'Game already started.');
             abort_if($game->members()->count() >= config('game.max_players'), 422, 'No more available seats in this room.');
             $used = $game->members()->pluck('color')->filter()->all();
@@ -153,6 +259,7 @@ class GameController extends Controller
 
     public function start(Request $request, Game $game)
     {
+        $this->ensurePlayable($game);
         $data = $request->validate(['user_id' => 'required|integer', 'stack' => 'sometimes|string|exists:stacks,slug', 'target_score' => 'required|integer|min:1|max:50']);
         $userId = (int) $data['user_id'];
         $stack = \App\Models\Stack::where('slug', $data['stack'] ?? 'normal')->firstOrFail();
@@ -175,6 +282,7 @@ class GameController extends Controller
 
         return DB::transaction(function () use ($data, $game, $stack) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            $this->ensurePlayable($game);
             if ($game->started && $game->winner_id) {
                 DB::table('game_cards')->where('game_id', $game->id)->delete();
                 $game->moves()->delete();
@@ -236,10 +344,12 @@ class GameController extends Controller
 
     public function move(Request $request, Game $game)
     {
+        $this->ensurePlayable($game);
         $data = $request->validate(['player_id' => 'required|integer', 'correct' => 'required|boolean']);
 
         return DB::transaction(function () use ($data, $game) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            $this->ensurePlayable($game);
             abort_unless($game->started, 422, 'Game has not started.');
             abort_if($game->winner_id, 409, 'This game has already finished.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'It is not your turn.');
@@ -272,10 +382,12 @@ class GameController extends Controller
 
     public function finishTurn(Request $request, Game $game)
     {
+        $this->ensurePlayable($game);
         $data = $request->validate(['player_id' => 'required|integer']);
 
         return DB::transaction(function () use ($data, $game) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            $this->ensurePlayable($game);
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'Only the active player can finish this turn.');
             abort_unless($game->awaiting_finish, 409, 'There is no completed turn to finish.');
             $move = Move::where('game_id', $game->id)->latest()->firstOrFail();
@@ -287,15 +399,40 @@ class GameController extends Controller
 
     public function passSteal(Request $request, Game $game)
     {
+        $this->ensurePlayable($game);
         $data = $request->validate(['player_id' => 'required|integer']);
 
         return DB::transaction(function () use ($data, $game) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            $this->ensurePlayable($game);
             abort_unless($game->is_steal_turn && ! $game->awaiting_finish, 409, 'There is no steal to pass.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'Only the active stealer can pass.');
             $this->advanceStealOrRound($game, false);
 
             return response()->json(['game' => $this->full($game)]);
+        });
+    }
+
+    public function leave(Request $request, Game $game)
+    {
+        $data = $request->validate(['user_id' => 'required|integer']);
+        $userId = (int) $data['user_id'];
+
+        return DB::transaction(function () use ($game, $userId) {
+            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            if ($game->terminated_at) return $this->full($game);
+            $originalMemberIds = $this->memberIds($game);
+            abort_unless(in_array($userId, $originalMemberIds, true), 404, 'Player is not in this room.');
+
+            if ($userId === (int) $game->owner_id) {
+                $this->terminateGame($game, 'host_left');
+            } else {
+                DB::table('members')->where('game_id', $game->id)->where('user_id', $userId)->delete();
+                $this->normalizeAfterMembersRemoved($game, $originalMemberIds, [$userId]);
+                Log::info('Player left game', ['game_id' => $game->id, 'user_id' => $userId]);
+            }
+
+            return $this->full($game->refresh());
         });
     }
 }
