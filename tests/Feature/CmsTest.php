@@ -52,21 +52,21 @@ class CmsTest extends TestCase
         $this->assertStringEndsWith('.png', $path);
         Http::assertSent(function ($request) {
             $reference = $request['input_references'][0]['image_url']['url'];
-            $referenceSvg = base64_decode(str_replace('data:image/svg+xml;base64,', '', $reference), true);
+            $referencePng = base64_decode(str_replace('data:image/png;base64,', '', $reference), true);
 
             return $request->url() === 'https://openrouter.ai/api/v1/images'
             && $request['model'] === 'openai/gpt-image-1'
             && $request['background'] === 'transparent'
             && $request['output_format'] === 'png'
-            && str_starts_with($reference, 'data:image/svg+xml;base64,')
-            && is_string($referenceSvg)
-            && str_contains($referenceSvg, 'Misery Meter main silhouette')
+            && str_starts_with($reference, 'data:image/png;base64,')
+            && is_string($referencePng)
+            && str_starts_with($referencePng, "\x89PNG\r\n\x1a\n")
             && str_contains($request['prompt'], 'Never return an amber-only image')
             && str_contains($request['prompt'], 'no eyes')
             && str_contains($request['prompt'], 'every visible person, object, and detail must be a solid filled')
             && str_contains($request['prompt'], 'main human silhouette must ALWAYS be solid pure white #FFFFFF')
             && str_contains($request['prompt'], 'event-specific element that causes or represents the misery must be solid primary amber #FACC15')
-            && str_contains($request['prompt'], 'main-silhouette SVG')
+            && str_contains($request['prompt'], 'main-silhouette PNG')
             && str_contains($request['prompt'], 'highly creative')
             && str_contains($request['prompt'], 'one person, two people, or three people')
             && str_contains($request['prompt'], 'do not force every situation into a one-person scene')

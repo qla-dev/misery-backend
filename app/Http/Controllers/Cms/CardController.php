@@ -108,7 +108,7 @@ class CardController extends Controller
             'People: depict humans only as anonymous, featureless safety-sign silhouettes with simple circular heads. Faces must be completely blank: no eyes, pupils, eyebrows, eyelashes, nose, nostrils, mouth, lips, teeth, ears, hair, facial hair, or facial expression.',
             'Mandatory subject color: the main human silhouette must ALWAYS be solid pure white #FFFFFF. Never make the main silhouette amber, gray, black, transparent, outlined, or any other color.',
             'Mandatory event color: the event-specific element that causes or represents the misery must be solid primary amber #FACC15. Supporting hazard or action elements should also use amber when useful.',
-            'Reference image: use the attached main-silhouette SVG as the required visual reference for the anonymous white human figure, including its simple safety-sign character and proportions. Adapt its pose creatively to the situation; do not copy the reference as a static logo.',
+            'Reference image: use the attached main-silhouette PNG as the required visual reference for the anonymous white human figure, including its simple safety-sign character and proportions. Adapt its pose creatively to the situation; do not copy the reference as a static logo.',
             'Environmental grounding: people and objects must not look like they are floating. Whenever spatially appropriate, add a minimal flat-filled environment such as a road, lane marking, sidewalk, floor, curb, platform, wall edge, room surface, slope, or other scene-specific ground plane in the permitted gray shades. The environment should support the action without overpowering it.',
             'Environment style limit: keep the environment extremely simple, clean, geometric, and vector-like, using only a few large flat-filled shapes. It must use the exact same safety-sign visual language as the people and event elements. Do not add realistic scenery, textures, tiny details, complex perspective, decorative clutter, or a separate background scene. The environment must feel like a natural part of the single pictogram, remain visually subordinate, and never compete with the main action.',
             'Composition: centered single scene, generous transparent padding, readable at small mobile-card size. Keep every person and important object visibly connected to the ground, environment, or another object.',
@@ -509,12 +509,15 @@ class CardController extends Controller
 
     private function silhouetteReferences(): array
     {
-        $svg = $this->silhouetteSvg();
+        $path = resource_path('ai/main-silhouette.png');
+        abort_unless(is_file($path), 500, 'Main silhouette reference PNG is missing.');
+        $png = file_get_contents($path);
+        abort_unless($png !== false && $png !== '', 500, 'Main silhouette reference PNG could not be read.');
 
         return [[
             'type' => 'image_url',
             'image_url' => [
-                'url' => 'data:image/svg+xml;base64,'.base64_encode($svg),
+                'url' => 'data:image/png;base64,'.base64_encode($png),
             ],
         ]];
     }
