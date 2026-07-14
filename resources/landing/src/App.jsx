@@ -59,6 +59,11 @@ const steps = [
   { n: '04', icon: Trophy, title: ['POBIJEDI', 'WIN'], text: ['Prvi sastavi ciljanu traku i preživi ekipu.', 'Build the target lane first and survive the group.'] },
 ];
 
+const tickerCopy = {
+  bs: ['OCIJENI BIJEDU', 'POSTAVI KARTU', 'IZGRADI TRAKU', 'UKRADI KARTU', 'PRVI DO CILJA POBJEĐUJE', 'UŽASNI DOGAĐAJI. ODLIČNA IGRA.'],
+  en: ['RATE THE MISERY', 'PLACE THE CARD', 'BUILD YOUR LANE', 'STEAL THE CARD', 'FIRST TO THE TARGET WINS', 'TERRIBLE EVENTS. GREAT GAME.'],
+};
+
 const cards = [
   { title: 'SPILL COFFEE ON YOUR LAPTOP', score: '55.5', icon: 'coffee', tone: 'bad' },
   { title: 'FOOD POISONING', score: '33.3', icon: 'food', tone: 'uneasy' },
@@ -121,6 +126,18 @@ function StoreButtons({ compact = false, lang = 'en', light = false, platformAwa
   useEffect(() => setPlatform(detectStorePlatform()), []);
   const visible = platformAware && platform ? [platform] : ['ios', 'android'];
   return <div className={`store-buttons ${compact ? 'compact' : ''}`}>{visible.map(item => <StoreButton compact={compact} key={item} lang={lang} light={light} platform={item}/>)}</div>;
+}
+
+function Ticker({ lang }) {
+  const items = tickerCopy[lang] || tickerCopy.en;
+
+  return <div className="ticker" aria-hidden="true">
+    <div className="ticker-track">
+      {[0, 1].map(group => <div className="ticker-group" key={group}>
+        {items.map(item => <span key={`${group}-${item}`}>{item} ✦</span>)}
+      </div>)}
+    </div>
+  </div>;
 }
 
 function LegacyGameCard({ card, hidden = false, className = '', animatedArtwork = false }) {
@@ -270,7 +287,7 @@ export default function App() {
     <main>
       <section className="hero" id="game"><div className="hero-grid"/><div className="hero-copy"><p className="kicker"><span/> {t.eyebrow}</p><h1><span>{t.heroA}</span><em>{t.heroB}</em></h1><p className="hero-lead">{t.hero}</p><div className="hero-buttons"><a className="primary-button" href="#playground">{t.play}<Zap size={18}/></a><StoreButtons lang={lang} platformAware/></div><div className="hero-stats"><div><b>100+</b><span>CARDS</span></div><div><b>2–8</b><span>PLAYERS</span></div><div><b>20′</b><span>CHAOS</span></div></div></div><div className="hero-deck"><div className="halo"/><GameCard card={scenarioPool[2 % scenarioPool.length]} className="card-back-left"/><GameCard card={scenarioPool[0]} className="card-back-right"/><GameCardBack className="hero-card"/><div className="floating-score"><span>SECRET</span><b>?.??</b><small>MISERY RATE</small></div></div><a className="scroll-cue" href="#playground"><span>{t.scroll}</span><ArrowDown/></a></section>
 
-      <div className="ticker" aria-hidden="true"/>
+      <Ticker lang={lang}/>
 
       <section className="playground" id="playground"><div className="section-heading"><p className="kicker">{t.labTag}</p><h2>{t.labTitle}</h2><p>{t.labText}</p></div><div className="guess-stage"><div className="guess-card-wrap"><GameCard card={scenario} hidden={!revealed} className={revealed?'revealed':''}/></div><div className="meter-panel"><div className="meter-labels"><span>BARELY BAD</span><span>ABSOLUTE MISERY</span></div><div className="meter-track"><div className="meter-fill" style={{width:`${guess}%`}}/><input aria-label="Misery guess" type="range" min="0" max="100" value={guess} onChange={e=>{setGuess(Number(e.target.value));setRevealed(false)}}/><div className="meter-ticks">{[0,20,40,60,80,100].map(x=><i key={x} style={{left:`${x}%`}}><span>{x}</span></i>)}</div></div><div className="guess-readout"><div><span>{t.yourGuess}</span><b>{guess}</b></div>{revealed&&<><div className="score-divider"/><div className="actual"><span>{t.actual}</span><b>{scenario.score}</b></div></>}</div>{revealed&&<p className={`verdict ${delta<8?'great':''}`}>{verdict}</p>}<button className="primary-button full" onClick={()=>revealed?nextScenario():setRevealed(true)}>{revealed?t.again:t.reveal}{revealed?<RotateCcw size={18}/>:<Sparkles size={18}/>}</button></div></div></section>
 
