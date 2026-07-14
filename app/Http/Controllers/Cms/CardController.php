@@ -297,8 +297,51 @@ class CardController extends Controller
             : '';
 
         return back()
-            ->with('success', 'Black-background JPEG artwork generated and saved via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').'.'.$costMessage." [Generation: {$generationId}]")
+            ->with('success', 'Black-background JPEG artwork generated via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').'. Adjust the square crop, then save it.'.$costMessage." [Generation: {$generationId}]")
+            ->with('crop_generated_artwork', [
+                'card_id' => $card->id,
+                'path' => $path,
+                'generation_id' => $generationId,
+            ])
             ->with('generated_prompt', $prompt);
+    }
+
+    public function saveGeneratedCrop(Request $request, Card $card)
+    {
+        $data = $request->validate([
+            'crop_data' => ['required', 'string', 'max:12000000'],
+            'generation_id' => ['nullable', 'uuid'],
+        ]);
+
+        abort_unless(
+            preg_match('#^data:image/jpeg;base64,([A-Za-z0-9+/=\r\n]+)$#', $data['crop_data'], $matches) === 1,
+            422,
+            'The cropped artwork must be a JPEG image.'
+        );
+
+        $image = base64_decode(str_replace(["\r", "\n"], '', $matches[1]), true);
+        abort_unless($image !== false && $image !== '', 422, 'The cropped artwork could not be decoded.');
+        abort_if(strlen($image) > 8 * 1024 * 1024, 422, 'The cropped artwork is too large.');
+
+        $jpeg = $this->convertCroppedImageToJpeg($image);
+        abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 422, 'The cropped JPEG is larger than 2 MB. Please zoom or crop it again.');
+
+        $path = 'cards/generated/card-'.$card->id.'-cropped-'.Str::uuid().'.jpg';
+        Storage::disk('public')->put($path, $jpeg);
+        abort_unless(Storage::disk('public')->exists($path), 500, 'The cropped artwork was not found after writing it to storage.');
+
+        $previousImage = $card->image;
+        $card->update(['image' => $path]);
+        $this->deleteManagedImage($previousImage);
+
+        Log::info('CMS generated artwork crop saved', [
+            'card_id' => $card->id,
+            'generation_id' => $data['generation_id'] ?? null,
+            'storage_path' => $path,
+            'jpeg_bytes' => strlen($jpeg),
+        ]);
+
+        return redirect()->route('cms.cards.edit', $card)->with('success', 'Square artwork crop saved.');
     }
 
     private function responseCost(array $response): ?float
@@ -712,6 +755,36 @@ class CardController extends Controller
         imagedestroy($jpegCanvas);
 
         abort_unless(is_string($result) && $result !== '', 502, 'Generated image could not be encoded as JPEG.');
+
+        return $result;
+    }
+
+    private function convertCroppedImageToJpeg(string $image): string
+    {
+        abort_unless(function_exists('imagecreatefromstring'), 422, 'GD is unavailable for crop processing.');
+        $source = @imagecreatefromstring($image);
+        abort_unless($source !== false, 422, 'The cropped artwork is not a valid image.');
+
+        $width = imagesx($source);
+        $height = imagesy($source);
+        abort_if($width < 256 || $height < 256 || $width !== $height, 422, 'The cropped artwork must be a square image of at least 256 pixels.');
+
+        if ($width !== 1024) {
+            $resized = imagecreatetruecolor(1024, 1024);
+            $black = imagecolorallocate($resized, 0, 0, 0);
+            imagefill($resized, 0, 0, $black);
+            imagecopyresampled($resized, $source, 0, 0, 0, 0, 1024, 1024, $width, $height);
+            imagedestroy($source);
+            $source = $resized;
+        }
+
+        $source = $this->enforceGeneratedPaletteAndSquareCorners($source);
+        ob_start();
+        imagejpeg($source, null, 96);
+        $result = ob_get_clean();
+        imagedestroy($source);
+
+        abort_unless(is_string($result) && $result !== '', 422, 'The cropped artwork could not be encoded as JPEG.');
 
         return $result;
     }

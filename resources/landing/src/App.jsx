@@ -123,7 +123,7 @@ function StoreButtons({ compact = false, lang = 'en', light = false, platformAwa
   return <div className={`store-buttons ${compact ? 'compact' : ''}`}>{visible.map(item => <StoreButton compact={compact} key={item} lang={lang} light={light} platform={item}/>)}</div>;
 }
 
-function GameCard({ card, hidden = false, className = '', animatedArtwork = false }) {
+function LegacyGameCard({ card, hidden = false, className = '', animatedArtwork = false }) {
   return <article className={`game-card ${className}`}>
     <div className="card-top"><span>MISERY</span><span>MM–{String(Math.round((card.score || 0) * 10)).padStart(3, '0')}</span></div>
     <div className="art-disc">{animatedArtwork || className.includes('hero-card') || card.icon === 'lightning' ? <MascotLetter className="card-mascot"/> : <Pictogram type={card.icon}/>}</div>
@@ -131,6 +131,30 @@ function GameCard({ card, hidden = false, className = '', animatedArtwork = fals
     <div className={`score-orbit ${hidden ? 'hidden-score' : ''}`}><b>{hidden ? '?' : card.score}</b><span>MISERY RATE</span></div>
   </article>;
 }
+
+function GameCard({ card, hidden = false, className = '', logoArtwork = false }) {
+  return <article className={`game-card main-game-card ${className}`}>
+    <div className="main-card-heading">
+      <p>{card.title}</p>
+      {card.sub && <small>{card.sub}</small>}
+    </div>
+    <div className={`main-card-artwork ${logoArtwork ? 'logo-artwork' : ''}`}>
+      {logoArtwork
+        ? <MascotLetter className="card-mascot"/>
+        : card.image
+          ? <img alt="" src={card.image}/>
+          : <Pictogram type={card.icon}/>
+      }
+    </div>
+    <div className="main-card-score">
+      <span>MISERY RATE</span>
+      <div><b>{hidden ? '??.?' : Number(card.score).toFixed(1)}</b></div>
+    </div>
+  </article>;
+}
+
+// Retained as a backup for the previous website-specific card treatment.
+void LegacyGameCard;
 
 function LegalPage({ type, lang, goHome }) {
   const isPrivacy = type === 'privacy';
@@ -187,9 +211,23 @@ export default function App() {
   const [guess, setGuess] = useState(46);
   const [revealed, setRevealed] = useState(false);
   const [faqOpen, setFaqOpen] = useState(0);
+  const [apiCards, setApiCards] = useState([]);
   const t = copy[lang];
-  const rawScenario = scenarios[scenarioIndex];
+  const realCards = useMemo(() => apiCards.map(card => ({
+    id: card.id,
+    image: card.image,
+    score: Number(card.score),
+    sub: card.subtitle || '',
+    subBs: card.subtitle_bs || card.subtitle || '',
+    title: card.title,
+    titleBs: card.title_bs || card.title,
+  })).filter(card => card.image && Number.isFinite(card.score)), [apiCards]);
+  const scenarioPool = realCards.length ? realCards : scenarios;
+  const rawScenario = scenarioPool[scenarioIndex % scenarioPool.length];
   const scenario = { ...rawScenario, title: lang === 'bs' && rawScenario.titleBs ? rawScenario.titleBs : rawScenario.title, sub: lang === 'bs' && rawScenario.subBs ? rawScenario.subBs : rawScenario.sub };
+  const galleryCards = realCards.length >= 4
+    ? [0, .33, .66, 1].map(position => realCards[Math.min(realCards.length - 1, Math.round((realCards.length - 1) * position))])
+    : cards;
   const delta = Math.abs(guess - scenario.score);
   const verdict = delta < 8 ? (lang==='bs'?'ZASTRAŠUJUĆE PRECIZNO':'SCARILY ACCURATE') : delta < 20 ? (lang==='bs'?'BLIZU. DOVOLJNO BLIZU.':'CLOSE. UNCOMFORTABLY CLOSE.') : (lang==='bs'?'TVOM INSTINKTU TREBA POMOĆ':'YOUR INSTINCT NEEDS HELP');
   const links = useMemo(() => [['#game',t.nav[0]],['#how',t.nav[1]],['#cards',t.nav[2]],['#shop',t.nav[3]]], [t]);
@@ -198,16 +236,29 @@ export default function App() {
     document.title = titles[page];
     document.documentElement.lang = lang;
   }, [lang, page]);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/cards', { headers: { Accept: 'application/json' } })
+      .then(response => {
+        if (!response.ok) throw new Error(`Cards request failed (${response.status})`);
+        return response.json();
+      })
+      .then(payload => {
+        if (active) setApiCards(Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : []);
+      })
+      .catch(error => console.warn('[Landing] Real cards unavailable; using bundled fallback cards.', error));
+    return () => { active = false; };
+  }, []);
   useEffect(() => { const onPop=()=>setPage(location.pathname.startsWith('/privacy')?'privacy':location.pathname.startsWith('/terms')?'terms':location.pathname.startsWith('/cookies')?'cookies':'home'); addEventListener('popstate',onPop); return()=>removeEventListener('popstate',onPop); }, []);
   function navigate(next) { const path=next==='home'?'/':`/${next}`; history.pushState({},'',path); setPage(next); scrollTo(0,0); }
-  function nextScenario() { setScenarioIndex(x=>(x+1)%scenarios.length); setGuess(Math.round(20+Math.random()*60)); setRevealed(false); }
+  function nextScenario() { setScenarioIndex(x=>(x+1)%scenarioPool.length); setGuess(Math.round(20+Math.random()*60)); setRevealed(false); }
   if (page !== 'home') return <LegalPage type={page} lang={lang} goHome={()=>navigate('home')}/>;
 
   return <div className="site-shell">
     <header className="site-header"><Brand/><nav className={menu?'open':''}>{links.map(([href,label])=><a href={href} key={href} onClick={()=>setMenu(false)}>{label}</a>)}</nav><div className="header-actions"><button className="language" onClick={()=>setLang(lang==='bs'?'en':'bs')}><Globe2 size={15}/>{lang==='bs'?'BS':'EN'}</button><StoreButtons compact lang={lang} platformAware/><button className="menu-button" onClick={()=>setMenu(!menu)}>{menu?<X/>:<Menu/>}</button></div></header>
 
     <main>
-      <section className="hero" id="game"><div className="hero-grid"/><div className="hero-copy"><p className="kicker"><span/> {t.eyebrow}</p><h1><span>{t.heroA}</span><em>{t.heroB}</em></h1><p className="hero-lead">{t.hero}</p><div className="hero-buttons"><a className="primary-button" href="#playground">{t.play}<Zap size={18}/></a><StoreButtons lang={lang} platformAware/></div><div className="hero-stats"><div><b>100+</b><span>CARDS</span></div><div><b>2–8</b><span>PLAYERS</span></div><div><b>20′</b><span>CHAOS</span></div></div></div><div className="hero-deck"><div className="halo"/><GameCard card={scenarios[2]} className="card-back-left"/><GameCard card={scenarios[0]} className="card-back-right"/><GameCard card={scenario} hidden className="hero-card"/><div className="floating-score"><span>SECRET</span><b>?</b><small>MISERY RATE</small></div></div><a className="scroll-cue" href="#playground"><span>{t.scroll}</span><ArrowDown/></a></section>
+      <section className="hero" id="game"><div className="hero-grid"/><div className="hero-copy"><p className="kicker"><span/> {t.eyebrow}</p><h1><span>{t.heroA}</span><em>{t.heroB}</em></h1><p className="hero-lead">{t.hero}</p><div className="hero-buttons"><a className="primary-button" href="#playground">{t.play}<Zap size={18}/></a><StoreButtons lang={lang} platformAware/></div><div className="hero-stats"><div><b>100+</b><span>CARDS</span></div><div><b>2–8</b><span>PLAYERS</span></div><div><b>20′</b><span>CHAOS</span></div></div></div><div className="hero-deck"><div className="halo"/><GameCard card={scenarioPool[2 % scenarioPool.length]} className="card-back-left"/><GameCard card={scenarioPool[0]} className="card-back-right"/><GameCard card={scenario} hidden logoArtwork className="hero-card"/><div className="floating-score"><span>SECRET</span><b>?</b><small>MISERY RATE</small></div></div><a className="scroll-cue" href="#playground"><span>{t.scroll}</span><ArrowDown/></a></section>
 
       <div className="ticker"><div>{Array.from({length:2}).flatMap((_,i)=>['LOSE YOUR KEYS','✦','MISS A FLIGHT','✦','SPILL COFFEE','✦','STEAL THE CARD','✦'].map((x,j)=><span key={`${i}-${j}`}>{x}</span>))}</div></div>
 
@@ -215,7 +266,7 @@ export default function App() {
 
       <section className="how" id="how"><div className="how-intro"><p className="kicker">{t.stepsTag}</p><h2>{t.stepsTitle}</h2></div><div className="steps">{steps.map((step,i)=>{const Icon=step.icon;return <article key={step.n} style={{'--delay':`${i*.08}s`}}><span className="step-number">{step.n}</span><div className="step-icon"><Icon/></div><h3>{step.title[lang==='bs'?0:1]}</h3><p>{step.text[lang==='bs'?0:1]}</p>{i<3&&<ArrowRight className="step-arrow"/>}</article>})}</div></section>
 
-      <section className="cards-section" id="cards"><div className="section-heading"><p className="kicker">{t.cardsTag}</p><h2>{t.cardsTitle}</h2></div><div className="card-gallery">{cards.map((card,i)=><div className={`gallery-card gc-${i}`} key={card.title}><GameCard card={{...card, score:card.score}}/><div className="gallery-caption"><span>{card.tone}</span><b>{card.score}</b></div></div>)}</div></section>
+      <section className="cards-section" id="cards"><div className="section-heading"><p className="kicker">{t.cardsTag}</p><h2>{t.cardsTitle}</h2></div><div className="card-gallery">{galleryCards.map((rawCard,i)=>{const card={...rawCard,title:lang==='bs'&&rawCard.titleBs?rawCard.titleBs:rawCard.title,sub:lang==='bs'&&rawCard.subBs?rawCard.subBs:rawCard.sub};return <div className={`gallery-card gc-${i}`} key={card.id || card.title}><GameCard card={card}/><div className="gallery-caption"><span>{card.tone}</span><b>{card.score}</b></div></div>})}</div></section>
 
       <section className="shop" id="shop"><div className="shop-heading"><p className="kicker">{t.shopTag}</p><h2>{t.shopTitle}</h2></div><div className="app-product-grid"><article className="phone-product"><div className="phone-stage"><div className="phone"><div className="phone-island"/><div className="phone-brand"><span>M</span><MascotLetter/><span>SERY</span><small>METER</small></div><div className="phone-lane"><i>03.7</i><b>?</b><i>55.5</i><i>72.4</i></div><button>PLACE ON MISERY LANE</button></div><div className="phone-ring"/></div><div className="app-copy"><p className="kicker">FREE TO START</p><h3>MISERY METER<br/>APP</h3><p>{lang==='bs'?'Kreiraj sobu, pozovi ekipu i gradi svoj Misery Lane uživo. Igra vodi poteze, otkriva ocjene i daje svima priliku za krađu.':'Create a room, invite the group, and build your Misery Lane live. The app runs turns, reveals scores, and gives everyone a chance to steal.'}</p><ul><li><Check/>{lang==='bs'?'Online multiplayer za 2–8 igrača':'Online multiplayer for 2–8 players'}</li><li><Check/>{lang==='bs'?'Solo mod sa tri života':'Solo mode with three lives'}</li><li><Check/>{lang==='bs'?'Brze sobe preko koda':'Fast rooms with a code'}</li></ul><StoreButtons lang={lang}/></div></article><article className="pro-product"><div className="pro-glow"/><div className="pro-icon"><Crown/></div><p className="kicker">IN THE APP</p><h3>{t.app}</h3><p>{t.appText}</p><div className="pro-perks"><span><Flame/>Spicy deck</span><span><Gamepad2/>Online play</span><span><Sparkles/>Future packs</span></div><StoreButtons lang={lang} light/><small>{lang==='bs'?'Pretplata se sigurno aktivira unutar mobilne aplikacije.':'Subscription is securely activated inside the mobile app.'}</small></article></div></section>
 

@@ -64,12 +64,17 @@ class CmsTest extends TestCase
         $card = Card::create(['title' => 'Flat tire', 'subtitle' => 'In heavy rain', 'score' => 12, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
         $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
 
-        $this->withServerVariables($server)->post('/cms/cards/'.$card->id.'/generate')
+        $response = $this->withServerVariables($server)->post('/cms/cards/'.$card->id.'/generate');
+        $response
             ->assertRedirect()
-            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'Cost: $0.012345.'));
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'Cost: $0.012345.'))
+            ->assertSessionHas('crop_generated_artwork', fn (array $crop) => (int) $crop['card_id'] === $card->id && filled($crop['path']));
         $path = $card->fresh()->image;
         Storage::disk('public')->assertExists($path);
         $this->assertStringEndsWith('.jpg', $path);
+        $this->withServerVariables($server)->get('/cms/cards/'.$card->id.'/edit')
+            ->assertOk()
+            ->assertSee('generatedCropForm');
         Http::assertSent(function ($request) {
             $reference = $request['input_references'][0]['image_url']['url'];
             $referencePng = base64_decode(str_replace('data:image/png;base64,', '', $reference), true);
@@ -281,6 +286,47 @@ class CmsTest extends TestCase
             ->post('/cms/cards/'.$card->id.'/generate')
             ->assertRedirect('/cms/cards/'.$card->id.'/edit')
             ->assertSessionHasErrors('generation');
+    }
+
+    public function test_generated_artwork_crop_replaces_the_original_with_a_square_jpeg(): void
+    {
+        Storage::fake('public');
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $originalPath = 'cards/generated/card-original.jpg';
+        Storage::disk('public')->put($originalPath, 'old-image');
+        $card = Card::create([
+            'title' => 'Flat tire',
+            'score' => 12,
+            'image' => $originalPath,
+            'deck' => 'normal',
+            'stack_id' => $stack->id,
+        ]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $image = imagecreatetruecolor(256, 256);
+        imagefill($image, 0, 0, imagecolorallocate($image, 250, 204, 21));
+        ob_start();
+        imagejpeg($image, null, 90);
+        $jpeg = ob_get_clean();
+        imagedestroy($image);
+
+        $this->withServerVariables($server)
+            ->post('/cms/cards/'.$card->id.'/crop-generated', [
+                'crop_data' => 'data:image/jpeg;base64,'.base64_encode($jpeg),
+                'generation_id' => '550e8400-e29b-41d4-a716-446655440000',
+            ])
+            ->assertRedirect(route('cms.cards.edit', $card))
+            ->assertSessionHas('success', 'Square artwork crop saved.');
+
+        $croppedPath = $card->fresh()->image;
+        $this->assertNotSame($originalPath, $croppedPath);
+        Storage::disk('public')->assertMissing($originalPath);
+        Storage::disk('public')->assertExists($croppedPath);
+        $saved = imagecreatefromstring(Storage::disk('public')->get($croppedPath));
+        $this->assertNotFalse($saved);
+        $this->assertSame(1024, imagesx($saved));
+        $this->assertSame(1024, imagesy($saved));
+        imagedestroy($saved);
     }
 
     public function test_generate_action_returns_to_cms_when_provider_returns_no_image(): void

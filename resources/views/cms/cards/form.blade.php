@@ -3,6 +3,9 @@
 @section('content')
 @php($image = old('image',$card->image) && old('image',$card->image) !== '0' ? (str_starts_with(old('image',$card->image),'http') ? old('image',$card->image) : url('/card-images/'.preg_replace('#^storage/#','',old('image',$card->image)))) : null)
 @php($svgImage = $card->svg_img ? url('/card-images/'.preg_replace('#^storage/#','',$card->svg_img)) : null)
+@php($cropArtwork = session('crop_generated_artwork'))
+@php($showCropper = is_array($cropArtwork) && (int) data_get($cropArtwork, 'card_id') === (int) $card->id && filled(data_get($cropArtwork, 'path')))
+@php($cropImage = $showCropper ? url('/card-images/'.preg_replace('#^storage/#','',data_get($cropArtwork, 'path'))) : null)
 <div class="toolbar"><div><h1>{{ $card->exists?'Edit card':'New card' }}</h1><p class="hint">Artwork uses the image first and the native dummy illustration as fallback.</p></div><a class="btn secondary" href="{{ route('cms.cards.index') }}">Back</a></div>
 <div class="form-grid"><form class="panel" method="post" enctype="multipart/form-data" action="{{ $card->exists?route('cms.cards.update',$card):route('cms.cards.store') }}">@csrf @if($card->exists)@method('PUT')@endif
 <div class="field"><label>Title / situation</label><input name="title" required value="{{ old('title',$card->title) }}"></div>
@@ -23,6 +26,16 @@
 @if(session('generated_prompt'))<details class="panel" style="margin-top:16px"><summary>Last generation prompt</summary><pre style="white-space:pre-wrap">{{ session('generated_prompt') }}</pre></details>@endif
 @if(session('generated_svg_prompt'))<details class="panel" style="margin-top:16px"><summary>Last SVG generation prompt</summary><pre style="white-space:pre-wrap">{{ session('generated_svg_prompt') }}</pre></details>@endif
 </div></div>
+@if($showCropper)
+<style>
+body.cropper-open{overflow:hidden}.generated-cropper{align-items:stretch;background:rgba(0,0,0,.96);display:flex;inset:0;position:fixed;z-index:1000}.generated-cropper__layout{display:grid;gap:24px;grid-template-columns:minmax(0,1fr) 290px;height:100%;padding:24px;width:100%}.generated-cropper__stage{align-items:center;display:flex;justify-content:center;min-height:0;overflow:hidden}.generated-cropper__frame{aspect-ratio:1;background:#000;border:2px solid var(--primary);box-shadow:0 0 35px rgba(250,204,21,.18);cursor:grab;max-height:calc(100vh - 48px);max-width:calc(100vh - 48px);position:relative;width:min(100%,calc(100vh - 48px))}.generated-cropper__frame.dragging{cursor:grabbing}.generated-cropper canvas{display:block;height:100%;touch-action:none;width:100%}.generated-cropper__panel{align-self:center;background:#171717;border:1px solid #333;border-radius:16px;padding:22px}.generated-cropper__panel h2{color:var(--primary);font-size:24px;margin:0 0 8px}.generated-cropper__panel p{color:#aaa;font-size:13px;line-height:1.5;margin:0 0 24px}.generated-cropper__panel input[type=range]{accent-color:var(--primary);padding:0}.generated-cropper__zoom{align-items:center;display:flex;gap:10px;margin:10px 0 22px}.generated-cropper__zoom output{font-variant-numeric:tabular-nums;min-width:46px;text-align:right}.generated-cropper__actions{display:grid;gap:10px}.generated-cropper__actions button{width:100%}.generated-cropper__actions .secondary{background:#292929;color:#eee}@media(max-width:760px){.generated-cropper__layout{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto;padding:14px}.generated-cropper__frame{max-height:calc(100vh - 245px);max-width:calc(100vh - 245px);width:min(100%,calc(100vh - 245px))}.generated-cropper__panel{padding:14px}.generated-cropper__panel p{margin-bottom:12px}.generated-cropper__zoom{margin-bottom:12px}.generated-cropper__actions{grid-template-columns:1fr 1fr 1fr}}
+</style>
+<div id="generatedCropper" class="generated-cropper" role="dialog" aria-modal="true" aria-labelledby="cropperTitle">
+<div class="generated-cropper__layout"><div class="generated-cropper__stage"><div id="cropFrame" class="generated-cropper__frame"><canvas id="cropCanvas" width="1024" height="1024"></canvas></div></div>
+<aside class="generated-cropper__panel"><h2 id="cropperTitle">Crop generated artwork</h2><p>Drag the image to reposition it. Zoom in or back out to fit the complete square.</p><label for="cropZoom">Zoom</label><div class="generated-cropper__zoom"><input id="cropZoom" type="range" min="1" max="3" step="0.01" value="1"><output id="cropZoomValue">100%</output></div>
+<form id="generatedCropForm" method="post" action="{{ route('cms.cards.crop-generated', $card) }}">@csrf<input id="cropData" type="hidden" name="crop_data"><input type="hidden" name="generation_id" value="{{ data_get($cropArtwork, 'generation_id') }}"><div class="generated-cropper__actions"><button id="saveCrop" type="submit">Save square crop</button><button id="resetCrop" class="secondary" type="button">Reset</button><button id="closeCropper" class="secondary" type="button">Keep original</button></div></form></aside></div>
+</div>
+@endif
 @endsection
 @push('scripts')<script>
 const upload=document.getElementById('imageUpload'),path=document.getElementById('imagePath'),preview=document.getElementById('preview'),fallback=document.getElementById('fallback');
@@ -53,4 +66,31 @@ svgGenerationForm?.addEventListener('submit',()=>{
     button.disabled=true;
     button.textContent='Generating SVG…';
 });
+@if($showCropper)
+(()=>{
+    const modal=document.getElementById('generatedCropper'),frame=document.getElementById('cropFrame'),canvas=document.getElementById('cropCanvas');
+    const zoomInput=document.getElementById('cropZoom'),zoomValue=document.getElementById('cropZoomValue'),form=document.getElementById('generatedCropForm');
+    const cropData=document.getElementById('cropData'),saveButton=document.getElementById('saveCrop'),context=canvas.getContext('2d');
+    const image=new Image();
+    let zoom=1,offsetX=0,offsetY=0,dragging=false,lastX=0,lastY=0,ready=false;
+    document.body.classList.add('cropper-open');
+    function dimensions(){const base=Math.min(canvas.width/image.naturalWidth,canvas.height/image.naturalHeight);return{width:image.naturalWidth*base*zoom,height:image.naturalHeight*base*zoom}}
+    function clampOffset(){const size=dimensions(),xLimit=Math.max(0,size.width-canvas.width)/2,yLimit=Math.max(0,size.height-canvas.height)/2;offsetX=Math.max(-xLimit,Math.min(xLimit,offsetX));offsetY=Math.max(-yLimit,Math.min(yLimit,offsetY))}
+    function draw(){if(!ready)return;clampOffset();const size=dimensions();context.fillStyle='#000';context.fillRect(0,0,canvas.width,canvas.height);context.imageSmoothingEnabled=true;context.imageSmoothingQuality='high';context.drawImage(image,(canvas.width-size.width)/2+offsetX,(canvas.height-size.height)/2+offsetY,size.width,size.height)}
+    function setZoom(next){const previous=zoom;zoom=Math.max(1,Math.min(3,next));if(previous>0){offsetX*=zoom/previous;offsetY*=zoom/previous}zoomInput.value=String(zoom);zoomValue.value=`${Math.round(zoom*100)}%`;draw()}
+    function close(){modal.remove();document.body.classList.remove('cropper-open')}
+    image.addEventListener('load',()=>{ready=true;draw()});
+    image.addEventListener('error',()=>{alert('The generated artwork could not be loaded.');close()});
+    image.src={{ Illuminate\Support\Js::from($cropImage.'?generation='.data_get($cropArtwork, 'generation_id')) }};
+    zoomInput.addEventListener('input',()=>setZoom(Number(zoomInput.value)));
+    frame.addEventListener('wheel',event=>{event.preventDefault();setZoom(zoom+(event.deltaY < 0 ? .08 : -.08))},{passive:false});
+    canvas.addEventListener('pointerdown',event=>{if(!ready)return;dragging=true;lastX=event.clientX;lastY=event.clientY;canvas.setPointerCapture(event.pointerId);frame.classList.add('dragging')});
+    canvas.addEventListener('pointermove',event=>{if(!dragging)return;const rect=canvas.getBoundingClientRect();offsetX+=(event.clientX-lastX)*(canvas.width/rect.width);offsetY+=(event.clientY-lastY)*(canvas.height/rect.height);lastX=event.clientX;lastY=event.clientY;draw()});
+    const stopDrag=()=>{dragging=false;frame.classList.remove('dragging')};
+    canvas.addEventListener('pointerup',stopDrag);canvas.addEventListener('pointercancel',stopDrag);
+    document.getElementById('resetCrop').addEventListener('click',()=>{offsetX=0;offsetY=0;setZoom(1)});
+    document.getElementById('closeCropper').addEventListener('click',close);
+    form.addEventListener('submit',event=>{if(!ready){event.preventDefault();return}draw();cropData.value=canvas.toDataURL('image/jpeg',.94);saveButton.disabled=true;saveButton.textContent='Saving crop...'});
+})();
+@endif
 </script>@endpush
