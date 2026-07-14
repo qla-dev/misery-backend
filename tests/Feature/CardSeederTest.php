@@ -52,6 +52,10 @@ class CardSeederTest extends TestCase
         $this->assertGreaterThanOrEqual(0.01, $scores->first());
         $this->assertSame(99.99, $scores->last());
         $this->assertTrue($scores->every(fn (float $score) => round($score, 2) !== floor($score)));
+        $this->assertSame(
+            0.76,
+            (float) Card::where('title', 'Throw a Surprise Party for the Wrong Person')->value('score')
+        );
         $this->assertLessThan(
             (float) Card::where('title', 'Break a Front Tooth on a First Date')->value('score'),
             (float) Card::where('title', 'Lose a Contact Lens Before a Live Interview')->value('score')
@@ -60,6 +64,28 @@ class CardSeederTest extends TestCase
             (float) Card::where('title', 'A Flash Flood Rushes Into the Canyon')->value('score'),
             (float) Card::where('title', 'A Pipe Bursts Above Your Bedroom')->value('score')
         );
+        $severityCheckpoints = [
+            'Throw a Surprise Party for the Wrong Person',
+            'Lose a Contact Lens Before a Live Interview',
+            'Break a Front Tooth on a First Date',
+            'Your Kayak Drifts Away From Shore',
+            'A Pipe Bursts Above Your Bedroom',
+            'Delete Your Finished Thesis Without a Backup',
+            'Airline Loses the Bag With Your Medicine',
+            'Get Trapped in an Elevator for Twelve Hours',
+            'Ceiling Collapses During Dinner',
+            'Discover Someone Stole Your Identity',
+            'Wire Your House Deposit to the Wrong Account',
+            'Have an Allergic Reaction at a Restaurant',
+            'A Flash Flood Rushes Into the Canyon',
+        ];
+        $checkpointScores = Card::whereIn('title', $severityCheckpoints)->pluck('score', 'title');
+        for ($index = 1; $index < count($severityCheckpoints); $index++) {
+            $this->assertGreaterThan(
+                (float) $checkpointScores[$severityCheckpoints[$index - 1]],
+                (float) $checkpointScores[$severityCheckpoints[$index]]
+            );
+        }
         $this->assertDatabaseMissing('cards', ['title' => 'Duplicate old card']);
         $this->assertDatabaseCount('games', 0);
         $this->assertDatabaseCount('members', 0);
@@ -86,7 +112,7 @@ class CardSeederTest extends TestCase
 
         $card->refresh();
         $this->assertSame('cards/uploads/keep.png', $card->image);
-        $this->assertSame(0.55, (float) $card->score);
+        $this->assertSame(6.55, (float) $card->score);
         $this->assertTrue(Game::whereKey($game->id)->exists());
         $this->assertSame(100, Card::count());
     }
