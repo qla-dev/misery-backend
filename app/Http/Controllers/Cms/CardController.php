@@ -109,7 +109,8 @@ class CardController extends Controller
             'People: depict humans only as anonymous, featureless safety-sign silhouettes with simple circular heads. Faces must be completely blank: no eyes, pupils, eyebrows, eyelashes, nose, nostrils, mouth, lips, teeth, ears, hair, facial hair, or facial expression.',
             'Mandatory subject color: the main human silhouette must ALWAYS be solid pure white #FFFFFF. Never make the main silhouette amber, gray, black, transparent, outlined, or any other color.',
             'Mandatory event color: the event-specific element that causes or represents the misery must be solid primary amber #FACC15. Supporting hazard or action elements should also use amber when useful.',
-            'Reference image: use the attached main-silhouette PNG as the required visual reference for the anonymous white human figure, including its simple safety-sign character and proportions. Adapt its pose creatively to the situation; do not copy the reference as a static logo.',
+            'Reference images: use the attached main-silhouette PNG as the required character reference, and use the three attached illustration examples only as visual-style references for bold pictogram storytelling, clean shape language, and readable staging.',
+            'Reference limits: create an original composition for this exact situation. Do not copy any example composition, pose, object arrangement, text, lettering, logo, border, background treatment, rounded corners, checkerboard, or colors outside the required three-color palette.',
             'Environmental grounding: people and objects must not look like they are floating. When spatially appropriate, use minimal black or amber filled ground elements such as a floor, curb, platform, wall edge, or stage. Keep the environment subordinate to the action.',
             'Composition: centered single scene with generous black padding, strong silhouette readability, and clear separation between shapes at small mobile-card size. Keep every person and important object visibly connected to the ground, environment, or another object.',
             'Background geometry is mandatory: fill the entire square canvas with opaque pure black #000000, including all four corners and every pixel along all four outer edges.',
@@ -462,12 +463,29 @@ class CardController extends Controller
         $url = rtrim((string) config('services.gemini_fallback.base_url'), '/')
             .'/models/'.rawurlencode($model).':generateContent';
         $reference = $this->silhouettePng();
+        $styleReferences = $this->styleReferenceImages();
+        $parts = [
+            ['text' => $prompt],
+            ['text' => 'The next PNG is the required character reference. Preserve its anonymous, featureless safety-sign silhouette proportions, recolor every person pure white, and adapt the pose to the situation. Do not copy its source background into the result.'],
+            ['inlineData' => [
+                'mimeType' => 'image/png',
+                'data' => base64_encode($reference),
+            ]],
+            ['text' => 'The next three images are style references only. Learn their bold pictogram readability and visual storytelling, but do not copy their compositions, text, frames, corners, backgrounds, or extra colors.'],
+        ];
+        foreach ($styleReferences as $styleReference) {
+            $parts[] = ['inlineData' => [
+                'mimeType' => $styleReference['mime_type'],
+                'data' => base64_encode($styleReference['data']),
+            ]];
+        }
 
         Log::info('CMS artwork sending direct Gemini fallback request', $logContext + [
             'gemini_model' => $model,
             'gemini_url' => $url,
             'prompt_bytes' => strlen($prompt),
             'reference_png_bytes' => strlen($reference),
+            'style_reference_count' => count($styleReferences),
         ]);
 
         $geminiResponse = Http::withHeaders([
@@ -479,14 +497,7 @@ class CardController extends Controller
             ->post($url, [
                 'contents' => [[
                     'role' => 'user',
-                    'parts' => [
-                        ['text' => $prompt],
-                        ['text' => 'The attached PNG is the required character reference. Preserve its anonymous, featureless safety-sign silhouette proportions, recolor every person pure white, and adapt the pose to the situation. Do not copy its source background into the result.'],
-                        ['inlineData' => [
-                            'mimeType' => 'image/png',
-                            'data' => base64_encode($reference),
-                        ]],
-                    ],
+                    'parts' => $parts,
                 ]],
                 'generationConfig' => [
                     'responseModalities' => ['IMAGE'],
@@ -523,13 +534,39 @@ class CardController extends Controller
     private function silhouetteReferences(): array
     {
         $png = $this->silhouettePng();
-
-        return [[
+        $references = [[
             'type' => 'image_url',
             'image_url' => [
                 'url' => 'data:image/png;base64,'.base64_encode($png),
             ],
         ]];
+
+        foreach ($this->styleReferenceImages() as $styleReference) {
+            $references[] = [
+                'type' => 'image_url',
+                'image_url' => [
+                    'url' => 'data:'.$styleReference['mime_type'].';base64,'.base64_encode($styleReference['data']),
+                ],
+            ];
+        }
+
+        return $references;
+    }
+
+    private function styleReferenceImages(): array
+    {
+        return array_map(function (string $filename): array {
+            $path = resource_path('ai/'.$filename);
+            abort_unless(is_file($path), 500, "Style reference {$filename} is missing.");
+            $data = file_get_contents($path);
+            abort_unless($data !== false && $data !== '', 500, "Style reference {$filename} could not be read.");
+
+            return ['mime_type' => 'image/jpeg', 'data' => $data];
+        }, [
+            'style-reference-1.jpg',
+            'style-reference-2.jpg',
+            'style-reference-3.jpg',
+        ]);
     }
 
     private function silhouettePng(): string

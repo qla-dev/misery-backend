@@ -59,6 +59,10 @@ class CmsTest extends TestCase
             && $request['quality'] === 'high'
             && $request['background'] === 'opaque'
             && $request['output_format'] === 'jpeg'
+            && count($request['input_references']) === 4
+            && str_starts_with($request['input_references'][1]['image_url']['url'], 'data:image/jpeg;base64,')
+            && str_starts_with($request['input_references'][2]['image_url']['url'], 'data:image/jpeg;base64,')
+            && str_starts_with($request['input_references'][3]['image_url']['url'], 'data:image/jpeg;base64,')
             && str_starts_with($reference, 'data:image/png;base64,')
             && is_string($referencePng)
             && str_starts_with($referencePng, "\x89PNG\r\n\x1a\n")
@@ -127,7 +131,10 @@ class CmsTest extends TestCase
                 && $request['generationConfig']['responseModalities'] === ['IMAGE']
                 && $request['generationConfig']['imageConfig']['aspectRatio'] === '1:1'
                 && $request['generationConfig']['imageConfig']['imageSize'] === '2K'
-                && $request['contents'][0]['parts'][2]['inlineData']['mimeType'] === 'image/png';
+                && $request['contents'][0]['parts'][2]['inlineData']['mimeType'] === 'image/png'
+                && $request['contents'][0]['parts'][4]['inlineData']['mimeType'] === 'image/jpeg'
+                && $request['contents'][0]['parts'][5]['inlineData']['mimeType'] === 'image/jpeg'
+                && $request['contents'][0]['parts'][6]['inlineData']['mimeType'] === 'image/jpeg';
         });
     }
 
