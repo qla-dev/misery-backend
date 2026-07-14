@@ -106,7 +106,8 @@ class CardController extends Controller
             'Shared-event exception: when the situation naturally affects a pair or group, both primary people may directly experience or perform the event. Even then, give them distinct roles and poses so the action reads as one connected interaction rather than duplicated figures.',
             'Style: polished, modern editorial safety-sign illustration made from clean, bold, solid-filled geometric people and objects. It should look professionally vector-designed, not like crude clip art.',
             'Mandatory fill style: every visible person, object, and detail must be a solid filled silhouette or filled shape. Do not use outline-only, stroke-only, line-art, wireframe, hollow, contour, border-style, or unfilled elements. Use smooth antialiased curves and crisp high-resolution edges.',
-            'Strict three-color palette: use exactly these three colors and no others: pure black #000000, pure white #FFFFFF, and primary amber #FACC15. Do not use gray, off-white, beige, orange, extra shades, gradients, transparency, or checkerboard patterns.',
+            'Strict three-color palette: use exactly these three flat colors and no others: pure black #000000, pure white #FFFFFF, and primary amber #FACC15. Every filled area must be one uniform solid color. Do not use gray, off-white, beige, orange, extra shades, gradients, color transitions, shading, highlights, lighting, glow, transparency, or checkerboard patterns.',
+            'Absolute gradient ban: never use a linear, radial, spotlight, shadow, fade, vignette, tonal variation, darker amber, lighter amber, gray antialias fill, or simulated depth. Do not shade furniture, floors, walls, people, props, or backgrounds. Flat solid fills only.',
             'Color roles: the entire square background must be solid black #000000; all people must be solid white #FFFFFF; the event, hazard, action, props, and misery-causing elements must be solid amber #FACC15. Black may define negative space and minimal environmental shapes.',
             'White is reserved exclusively for human silhouettes. Never use white for floors, stages, podiums, platforms, furniture, walls, borders, props, devices, spotlights, or background shapes. Never create a large white rectangle, block, slab, base, band, or mass anywhere in the scene.',
             'Mandatory color balance: white and amber must both be clearly visible and important to the scene. Include at least one large, distinct, solid-white person occupying a meaningful part of the illustration; tiny white accents, outlines, or highlights do not count. Use amber for at least one substantial event or hazard element. Never return an amber-only image.',
@@ -128,6 +129,7 @@ class CardController extends Controller
             'Background geometry is mandatory: fill the entire square canvas with opaque pure black #000000, including all four corners and every pixel along all four outer edges.',
             'Never place the scene inside a rounded rectangle, rounded card, inset panel, container, vignette, mask, frame, or tile. Never round, clip, soften, curve, bevel, or cut off the canvas corners.',
             'The four canvas corners must be square and pure black. There must be no white corner wedges, margin, padding outside the black background, visible outer canvas, transparency, alpha, checkerboard pattern, border, or contrasting area around the black scene.',
+            'Absolute frame ban: do not draw any enclosing rectangle, square, outline, keyline, stroke, picture frame, card frame, poster frame, inner border, outer border, white border, amber border, or decorative line around the scene. No line may run parallel to and connect around the four canvas edges. The artwork must remain an open edge-to-edge scene on black.',
             'Quality: render at 1024×1024 or higher with smooth antialiasing, clean curves, crisp shape boundaries, and no pixelation, jagged edges, compression artifacts, grain, noise, halftone dots, texture, or blur.',
             'Zero typography rule: the generated image must contain absolutely no text-like marks: no words, letters, numbers, digits, decimal points, scores, ratings, captions, labels, signs, UI, symbols that resemble writing, logos, or watermark. Do not render the card title, description, or misery score inside the artwork.',
             'Output is illustration only: never depict a finished game card, card shell, poster, badge, score panel, caption area, title area, UI panel, or rounded rectangular container. The JPEG itself is the scene, not a picture of a card.',
@@ -652,6 +654,8 @@ class CardController extends Controller
         abort_unless(function_exists('imagecreatefromstring'), 502, 'GD is unavailable for JPEG conversion.');
         $source = @imagecreatefromstring($image);
         abort_unless($source !== false, 502, 'Generated image could not be decoded.');
+        $source = $this->removeDetectedBrightFrame($source);
+        $source = $this->enforceGeneratedPaletteAndSquareCorners($source);
 
         $sourceWidth = imagesx($source);
         $sourceHeight = imagesy($source);
@@ -662,12 +666,120 @@ class CardController extends Controller
         imagecopy($jpegCanvas, $source, 0, 0, 0, 0, $sourceWidth, $sourceHeight);
 
         ob_start();
-        imagejpeg($jpegCanvas, null, 92);
+        imagejpeg($jpegCanvas, null, 96);
         $result = ob_get_clean();
         imagedestroy($source);
         imagedestroy($jpegCanvas);
 
         abort_unless(is_string($result) && $result !== '', 502, 'Generated image could not be encoded as JPEG.');
+
+        return $result;
+    }
+
+    private function enforceGeneratedPaletteAndSquareCorners(\GdImage $source): \GdImage
+    {
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $normalized = imagecreatetruecolor($width, $height);
+        $palette = [
+            [0, 0, 0, imagecolorallocate($normalized, 0, 0, 0)],
+            [255, 255, 255, imagecolorallocate($normalized, 255, 255, 255)],
+            [250, 204, 21, imagecolorallocate($normalized, 250, 204, 21)],
+        ];
+
+        for ($y = 0; $y < $height; $y++) {
+            for ($x = 0; $x < $width; $x++) {
+                $color = imagecolorat($source, $x, $y);
+                $red = ($color >> 16) & 0xFF;
+                $green = ($color >> 8) & 0xFF;
+                $blue = $color & 0xFF;
+                $nearest = $palette[0];
+                $nearestDistance = PHP_INT_MAX;
+                foreach ($palette as $candidate) {
+                    $distance = ($red - $candidate[0]) ** 2 + ($green - $candidate[1]) ** 2 + ($blue - $candidate[2]) ** 2;
+                    if ($distance < $nearestDistance) {
+                        $nearest = $candidate;
+                        $nearestDistance = $distance;
+                    }
+                }
+                imagesetpixel($normalized, $x, $y, $nearest[3]);
+            }
+        }
+        imagedestroy($source);
+
+        $black = $palette[0][3];
+        $white = $palette[1][3];
+        foreach ([[0, 0], [$width - 1, 0], [0, $height - 1], [$width - 1, $height - 1]] as [$x, $y]) {
+            if (imagecolorat($normalized, $x, $y) === $white) {
+                imagefill($normalized, $x, $y, $black);
+            }
+        }
+
+        return $normalized;
+    }
+
+    private function removeDetectedBrightFrame(\GdImage $source): \GdImage
+    {
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $xLimit = max(1, (int) floor($width * 0.15));
+        $yLimit = max(1, (int) floor($height * 0.15));
+        $isBright = static function (int $color): bool {
+            return (($color >> 16) & 0xFF) >= 220
+                && (($color >> 8) & 0xFF) >= 220
+                && ($color & 0xFF) >= 220;
+        };
+        $brightRow = static function (int $y) use ($source, $width, $isBright): bool {
+            $bright = 0;
+            for ($x = 0; $x < $width; $x += 2) {
+                $bright += $isBright(imagecolorat($source, $x, $y)) ? 1 : 0;
+            }
+
+            return $bright / max(1, (int) ceil($width / 2)) >= 0.72;
+        };
+        $brightColumn = static function (int $x) use ($source, $height, $isBright): bool {
+            $bright = 0;
+            for ($y = 0; $y < $height; $y += 2) {
+                $bright += $isBright(imagecolorat($source, $x, $y)) ? 1 : 0;
+            }
+
+            return $bright / max(1, (int) ceil($height / 2)) >= 0.72;
+        };
+
+        $top = $bottom = $left = $right = null;
+        for ($y = 0; $y < $yLimit; $y++) {
+            if ($brightRow($y)) {
+                $top = $y;
+            }
+            if ($brightRow($height - 1 - $y)) {
+                $bottom = $height - 1 - $y;
+            }
+        }
+        for ($x = 0; $x < $xLimit; $x++) {
+            if ($brightColumn($x)) {
+                $left = $x;
+            }
+            if ($brightColumn($width - 1 - $x)) {
+                $right = $width - 1 - $x;
+            }
+        }
+
+        if ($top === null || $bottom === null || $left === null || $right === null) {
+            return $source;
+        }
+
+        $padding = max(2, (int) round(min($width, $height) * 0.01));
+        $cropX = $left + $padding;
+        $cropY = $top + $padding;
+        $cropWidth = $right - $cropX - $padding;
+        $cropHeight = $bottom - $cropY - $padding;
+        if ($cropWidth < $width * 0.6 || $cropHeight < $height * 0.6) {
+            return $source;
+        }
+
+        $result = imagecreatetruecolor($width, $height);
+        imagecopyresampled($result, $source, 0, 0, $cropX, $cropY, $width, $height, $cropWidth, $cropHeight);
+        imagedestroy($source);
 
         return $result;
     }

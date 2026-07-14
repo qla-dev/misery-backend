@@ -10,5 +10,5 @@
 <td><b>{{ $card->title }}</b><div class="hint">{{ Str::limit($card->subtitle,70) }}</div></td><td>{{ number_format($card->score,1) }}</td><td><span class="badge">{{ $card->stack?->name ?? $card->deck }}</span></td>
 <td><div class="actions"><a class="btn secondary" href="{{ route('cms.cards.edit',$card) }}">Open</a><form method="post" action="{{ route('cms.cards.destroy',$card) }}" onsubmit="return confirm('Delete this card?')">@csrf @method('DELETE')<button class="danger">Delete</button></form></div></td></tr>
 @empty<tr><td colspan="5">No cards found.</td></tr>@endforelse
-</tbody></table></div><div class="pagination">{{ $cards->links() }}</div>
+</tbody></table></div>{{ $cards->links('cms.pagination') }}
 @endsection

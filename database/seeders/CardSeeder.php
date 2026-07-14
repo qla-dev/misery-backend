@@ -138,6 +138,18 @@ class CardSeeder extends Seeder
             ['A Meteorite Punches Through Your Roof', 'The impossible rock misses you, destroys the house, and starts smoking.', 96.1],
         ];
 
+        $rankedScores = array_values(array_unique(array_column($events, 2)));
+        sort($rankedScores, SORT_NUMERIC);
+        $scoreByOriginalValue = array_combine(
+            array_map(static fn (float $score): string => (string) $score, $rankedScores),
+            range(1, count($rankedScores))
+        );
+        $events = array_map(static function (array $event) use ($scoreByOriginalValue): array {
+            $event[2] = $scoreByOriginalValue[(string) $event[2]];
+
+            return $event;
+        }, $events);
+
         DB::transaction(function () use ($events, $normal) {
             DB::table('moves')->delete();
             DB::table('game_cards')->delete();

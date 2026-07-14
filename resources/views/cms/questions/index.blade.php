@@ -25,5 +25,5 @@
 @empty<tr><td colspan="7" class="hint">No questions found.</td></tr>@endforelse
 </tbody></table>
 </div>
-<div class="pagination">{{ $questions->links() }}</div>
+{{ $questions->links('cms.pagination') }}
 @endsection

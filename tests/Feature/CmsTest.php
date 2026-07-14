@@ -84,6 +84,8 @@ class CmsTest extends TestCase
             && str_contains($request['prompt'], 'all four corners and every pixel along all four outer edges')
             && str_contains($request['prompt'], 'Never place the scene inside a rounded rectangle')
             && str_contains($request['prompt'], 'no white corner wedges')
+            && str_contains($request['prompt'], 'Absolute frame ban')
+            && str_contains($request['prompt'], 'inner border, outer border, white border, amber border')
             && str_contains($request['prompt'], 'White is reserved exclusively for human silhouettes')
             && str_contains($request['prompt'], 'Never create a large white rectangle, block, slab')
             && str_contains($request['prompt'], 'not a collage, infographic, diagram, collection of icons')
@@ -96,7 +98,9 @@ class CmsTest extends TestCase
             && str_contains($request['prompt'], 'ignore and omit its timer display, digits')
             && str_contains($request['prompt'], 'no words, letters, numbers, digits, decimal points, scores')
             && str_contains($request['prompt'], 'never depict a finished game card, card shell')
-            && str_contains($request['prompt'], 'exactly these three colors')
+            && str_contains($request['prompt'], 'exactly these three flat colors')
+            && str_contains($request['prompt'], 'Absolute gradient ban')
+            && str_contains($request['prompt'], 'Flat solid fills only')
             && str_contains($request['prompt'], 'pure black #000000')
             && str_contains($request['prompt'], 'no pixelation');
         });
