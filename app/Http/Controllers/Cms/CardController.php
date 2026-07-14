@@ -99,25 +99,36 @@ class CardController extends Controller
             $card->subtitle ? "Context: {$card->subtitle}" : '',
             'Create one bold, instantly readable pictogram scene that clearly explains the unfortunate situation.',
             'Be highly creative: invent a clever, surprising visual metaphor for this specific situation while keeping the scene instantly understandable at card size. Avoid generic or repetitive compositions.',
-            'Scene planning: before composing the image, silently determine whether this specific situation logically needs one person, two people, or three people. Use the smallest cast that fully communicates the event, but do not force every situation into a one-person scene. Interpersonal events, collisions, assistance, conflict, crowds, shared activities, or cause-and-effect interactions may require two or three clearly posed people.',
-            'Multi-person clarity: when two or three people are needed, give each person a distinct pose and clear role in the action. Keep them visually separated enough to read at small size while preserving one unified scene.',
+            'Cast requirement: always depict at least two clearly visible people. Use two people by default and add a third only when it materially improves the situation. Never generate a one-person scene.',
+            'Multi-person staging: organize the composition around the two primary people. Give each person a distinct pose, clear role, and direct physical or visual relationship to the same event. They must interact with each other, the same prop, or the same cause-and-effect action rather than appearing as unrelated figures.',
+            'Character hierarchy: one person must be the obvious main character and primary victim of the misery. Make this person larger, more central, and most visually important. Their pose must clearly show the unfortunate action or consequence.',
+            'Secondary character role: when the misery primarily affects one person, the second person must be a supporting character who reacts to the main victim—for example laughing, pointing, staring, recoiling, filming, helping, causing the accident, or witnessing the embarrassment. Show the reaction only through a clear full-body pose and gesture; faces must remain completely blank.',
+            'Shared-event exception: when the situation naturally affects a pair or group, both primary people may directly experience or perform the event. Even then, give them distinct roles and poses so the action reads as one connected interaction rather than duplicated figures.',
             'Style: polished, modern editorial safety-sign illustration made from clean, bold, solid-filled geometric people and objects. It should look professionally vector-designed, not like crude clip art.',
             'Mandatory fill style: every visible person, object, and detail must be a solid filled silhouette or filled shape. Do not use outline-only, stroke-only, line-art, wireframe, hollow, contour, border-style, or unfilled elements. Use smooth antialiased curves and crisp high-resolution edges.',
             'Strict three-color palette: use exactly these three colors and no others: pure black #000000, pure white #FFFFFF, and primary amber #FACC15. Do not use gray, off-white, beige, orange, extra shades, gradients, transparency, or checkerboard patterns.',
-            'Color roles: the entire square background must be solid black #000000; all people must be solid white #FFFFFF; the event, hazard, action, or misery-causing elements must be solid amber #FACC15. Black may also define negative space and simple environmental shapes.',
+            'Color roles: the entire square background must be solid black #000000; all people must be solid white #FFFFFF; the event, hazard, action, props, and misery-causing elements must be solid amber #FACC15. Black may define negative space and minimal environmental shapes.',
+            'White is reserved exclusively for human silhouettes. Never use white for floors, stages, podiums, platforms, furniture, walls, borders, props, devices, spotlights, or background shapes. Never create a large white rectangle, block, slab, base, band, or mass anywhere in the scene.',
             'Mandatory color balance: white and amber must both be clearly visible and important to the scene. Include at least one large, distinct, solid-white person occupying a meaningful part of the illustration; tiny white accents, outlines, or highlights do not count. Use amber for at least one substantial event or hazard element. Never return an amber-only image.',
             'People: depict humans only as anonymous, featureless safety-sign silhouettes with simple circular heads. Faces must be completely blank: no eyes, pupils, eyebrows, eyelashes, nose, nostrils, mouth, lips, teeth, ears, hair, facial hair, or facial expression.',
             'Mandatory subject color: the main human silhouette must ALWAYS be solid pure white #FFFFFF. Never make the main silhouette amber, gray, black, transparent, outlined, or any other color.',
             'Mandatory event color: the event-specific element that causes or represents the misery must be solid primary amber #FACC15. Supporting hazard or action elements should also use amber when useful.',
             'Reference images: use the attached main-silhouette PNG as the required character reference, and use the three attached illustration examples only as visual-style references for bold pictogram storytelling, clean shape language, and readable staging.',
-            'Reference limits: create an original composition for this exact situation. Do not copy any example composition, pose, object arrangement, text, lettering, logo, border, background treatment, rounded corners, checkerboard, or colors outside the required three-color palette.',
-            'Environmental grounding: people and objects must not look like they are floating. When spatially appropriate, use minimal black or amber filled ground elements such as a floor, curb, platform, wall edge, or stage. Keep the environment subordinate to the action.',
-            'Composition: centered single scene with generous black padding, strong silhouette readability, and clear separation between shapes at small mobile-card size. Keep every person and important object visibly connected to the ground, environment, or another object.',
+            'Reference limits: create an original composition for this exact situation. Do not copy any example composition, pose, object arrangement, text, lettering, logo, border, background treatment, rounded corners, checkerboard, white floor or platform, floating prop, icon collage, or colors outside the required three-color palette.',
+            'Physical scene rule: create one coherent, believable cause-and-effect composition, not a collage, infographic, diagram, collection of icons, or scattered symbols. Every element must have an obvious spatial relationship to the main action.',
+            'Grounding rule: nothing may float. Every person must visibly stand, sit, fall, lean, or make contact with another object. Every prop must be visibly held, attached, mounted on a stand or wall, or resting on a clearly connected surface.',
+            'Universal object rule: no object of any kind may appear as a free-floating icon or disconnected symbol. Every device, tool, hazard, piece of furniture, vehicle, sign, light, prop, and environmental element must be visibly held, attached, mounted, supported, resting on a connected surface, or naturally positioned within the scene.',
+            'Environmental grounding: use only the minimum black or amber environmental geometry needed to establish a real floor, stage, curb, wall, or support. Keep it thin, physically plausible, and subordinate. Never use a huge foreground block, podium, platform slab, decorative base, or shape that consumes the lower portion of the image.',
+            'Full-canvas composition: build a complete environment that fills and visually balances the entire square, including foreground, middle ground, background, left side, right side, upper area, and lower area. Do not leave the people isolated in a mostly empty black void.',
+            'Background content: always include meaningful scene-specific background and environmental context using black negative space plus amber shapes. Distribute useful details around the action so the image feels complete and immersive, while keeping the two people as the clear focal point.',
+            'Composition density: use the canvas confidently with large, readable subjects and supporting context across the frame. Avoid excessive empty space, tiny centered subjects, sparse icon layouts, clutter, and decorative filler. Keep all elements part of one unified scene.',
             'Background geometry is mandatory: fill the entire square canvas with opaque pure black #000000, including all four corners and every pixel along all four outer edges.',
             'Never place the scene inside a rounded rectangle, rounded card, inset panel, container, vignette, mask, frame, or tile. Never round, clip, soften, curve, bevel, or cut off the canvas corners.',
             'The four canvas corners must be square and pure black. There must be no white corner wedges, margin, padding outside the black background, visible outer canvas, transparency, alpha, checkerboard pattern, border, or contrasting area around the black scene.',
             'Quality: render at 1024×1024 or higher with smooth antialiasing, clean curves, crisp shape boundaries, and no pixelation, jagged edges, compression artifacts, grain, noise, halftone dots, texture, or blur.',
-            'Constraints: JPEG; no text, letters, numbers, logos, watermark, card frame, border, gradients, lighting effects, or shadows. Use only black #000000, white #FFFFFF, and amber #FACC15.',
+            'Zero typography rule: the generated image must contain absolutely no text-like marks: no words, letters, numbers, digits, decimal points, scores, ratings, captions, labels, signs, UI, symbols that resemble writing, logos, or watermark. Do not render the card title, description, or misery score inside the artwork.',
+            'Output is illustration only: never depict a finished game card, card shell, poster, badge, score panel, caption area, title area, UI panel, or rounded rectangular container. The JPEG itself is the scene, not a picture of a card.',
+            'Constraints: JPEG; no card frame, border, gradients, lighting effects, or shadows. Use only black #000000, white #FFFFFF, and amber #FACC15.',
         ]);
 
         $providerUsed = 'openrouter';
@@ -471,7 +482,7 @@ class CardController extends Controller
                 'mimeType' => 'image/png',
                 'data' => base64_encode($reference),
             ]],
-            ['text' => 'The next three images are style references only. Learn their bold pictogram readability and visual storytelling, but do not copy their compositions, text, frames, corners, backgrounds, or extra colors.'],
+            ['text' => 'The next three images are style references only. Learn their bold pictogram readability and visual storytelling, but do not copy their compositions, text, frames, corners, backgrounds, white platforms, floating props, disconnected icons, or extra colors. Follow the prompt’s physical grounding and color-role rules instead.'],
         ];
         foreach ($styleReferences as $styleReference) {
             $parts[] = ['inlineData' => [
@@ -555,18 +566,38 @@ class CardController extends Controller
 
     private function styleReferenceImages(): array
     {
-        return array_map(function (string $filename): array {
+        return array_map(function (array $reference): array {
+            $filename = $reference['filename'];
             $path = resource_path('ai/'.$filename);
             abort_unless(is_file($path), 500, "Style reference {$filename} is missing.");
             $data = file_get_contents($path);
             abort_unless($data !== false && $data !== '', 500, "Style reference {$filename} could not be read.");
 
-            return ['mime_type' => 'image/jpeg', 'data' => $data];
+            return ['mime_type' => 'image/jpeg', 'data' => $this->cropStyleReference($data, $reference['crop'], $filename)];
         }, [
-            'style-reference-1.jpg',
-            'style-reference-2.jpg',
-            'style-reference-3.jpg',
+            ['filename' => 'style-reference-1.jpg', 'crop' => [20, 76, 260, 112]],
+            ['filename' => 'style-reference-2.jpg', 'crop' => [1500, 760, 1200, 850]],
+            ['filename' => 'style-reference-3.jpg', 'crop' => [240, 155, 195, 145]],
         ]);
+    }
+
+    private function cropStyleReference(string $jpeg, array $crop, string $filename): string
+    {
+        abort_unless(function_exists('imagecreatefromstring'), 500, 'GD is required to prepare style references.');
+        $source = @imagecreatefromstring($jpeg);
+        abort_unless($source !== false, 500, "Style reference {$filename} is not a valid image.");
+        [$x, $y, $width, $height] = $crop;
+        abort_if($x < 0 || $y < 0 || $x + $width > imagesx($source) || $y + $height > imagesy($source), 500, "Style reference {$filename} has invalid crop dimensions.");
+        $cropped = imagecrop($source, ['x' => $x, 'y' => $y, 'width' => $width, 'height' => $height]);
+        imagedestroy($source);
+        abort_unless($cropped !== false, 500, "Style reference {$filename} could not be cropped.");
+        ob_start();
+        imagejpeg($cropped, null, 92);
+        $result = ob_get_clean();
+        imagedestroy($cropped);
+        abort_unless(is_string($result) && $result !== '', 500, "Style reference {$filename} could not be encoded.");
+
+        return $result;
     }
 
     private function silhouettePng(): string
