@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'max_players' => 5,
+    'max_players' => 8,
     'ios_app_team_id' => env('IOS_APP_TEAM_ID', ''),
     'android_app_sha256_cert_fingerprints' => array_values(array_filter(array_map(
         'trim',
