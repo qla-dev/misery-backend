@@ -73,7 +73,9 @@ class CmsTest extends TestCase
             && str_contains($request['prompt'], 'do not force every situation into a one-person scene')
             && str_contains($request['prompt'], 'people and objects must not look like they are floating')
             && str_contains($request['prompt'], 'smooth antialiased curves')
-            && str_contains($request['prompt'], 'completely opaque, uniform, edge-to-edge')
+            && str_contains($request['prompt'], 'all four corners and every pixel along all four outer edges')
+            && str_contains($request['prompt'], 'Never place the scene inside a rounded rectangle')
+            && str_contains($request['prompt'], 'no white corner wedges')
             && str_contains($request['prompt'], 'exactly these three colors')
             && str_contains($request['prompt'], 'pure black #000000')
             && str_contains($request['prompt'], 'no pixelation');
