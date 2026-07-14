@@ -22,6 +22,11 @@ class GameDeckSelectionTest extends TestCase
             Card::create(['title' => "Normal {$index}", 'score' => $index, 'deck' => 'normal', 'stack_id' => $normal->id]);
             Card::create(['title' => "Spicy {$index}", 'score' => $index, 'deck' => 'spicy', 'stack_id' => $spicy->id]);
         }
+        foreach (range(1, 5) as $index) {
+            Card::create(['title' => "Draft spicy {$index}", 'score' => 50 + $index, 'status' => false, 'deck' => 'spicy', 'stack_id' => $spicy->id]);
+        }
+
+        $this->getJson('/api/cards')->assertOk()->assertJsonMissing(['title' => 'Draft spicy 1']);
 
         $owner = User::factory()->create(['color' => 'yellow']);
         $opponent = User::factory()->create(['color' => 'blue']);
@@ -37,6 +42,7 @@ class GameDeckSelectionTest extends TestCase
         $dealtCardIds = DB::table('game_cards')->where('game_id', $game->id)->pluck('card_id');
         $this->assertCount(7, $dealtCardIds);
         $this->assertSame(0, Card::whereIn('id', $dealtCardIds)->where('stack_id', '!=', $spicy->id)->count());
+        $this->assertSame(0, Card::whereIn('id', $dealtCardIds)->where('status', false)->count());
 
         $this->postJson("/api/games/{$game->id}/moves", [
             'player_id' => $owner->id,
@@ -50,5 +56,7 @@ class GameDeckSelectionTest extends TestCase
         $game->refresh();
         $this->assertSame($spicy->id, $game->stack_id);
         $this->assertSame($spicy->id, $game->currentCard()->value('stack_id'));
+        $this->assertTrue($game->currentCard()->value('status'));
+        $this->assertSame(0, DB::table('game_cards')->join('cards', 'cards.id', '=', 'game_cards.card_id')->where('game_cards.game_id', $game->id)->where('cards.status', false)->count());
     }
 }

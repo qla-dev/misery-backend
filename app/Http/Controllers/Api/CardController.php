@@ -1,3 +1,13 @@
 <?php
-namespace App\Http\Controllers\Api; use App\Http\Controllers\Controller; use App\Http\Resources\CardResource; use App\Models\Card; use Illuminate\Http\Request;
-class CardController extends Controller { public function index(){return CardResource::collection(Card::with('stack')->orderBy('score')->orderBy('id')->get());} public function store(Request $r){return new CardResource(Card::create($r->validate(['title'=>'required','subtitle'=>'nullable|string','score'=>'required|numeric|min:0|max:100','image'=>'sometimes|nullable|string','deck'=>'sometimes|string','stack_id'=>'sometimes|nullable|exists:stacks,id']))->load('stack'));} public function show(Card $card){return new CardResource($card->load('stack'));} public function update(Request $r,Card $card){$card->update($r->validate(['title'=>'sometimes','subtitle'=>'nullable|string','score'=>'sometimes|numeric|min:0|max:100','image'=>'sometimes|nullable|string','deck'=>'sometimes|string','stack_id'=>'sometimes|nullable|exists:stacks,id'])); return new CardResource($card->load('stack'));} public function destroy(Card $card){$card->delete();return response()->noContent();} }
+namespace App\Http\Controllers\Api;
+use App\Http\Controllers\Controller;
+use App\Http\Resources\CardResource;
+use App\Models\Card;
+use Illuminate\Http\Request;
+class CardController extends Controller {
+    public function index(){return CardResource::collection(Card::with('stack')->where('status',true)->orderBy('score')->orderBy('id')->get());}
+    public function store(Request $r){return new CardResource(Card::create($r->validate(['title'=>'required','subtitle'=>'nullable|string','score'=>'required|numeric|min:0|max:100','image'=>'sometimes|nullable|string','deck'=>'sometimes|string','stack_id'=>'sometimes|nullable|exists:stacks,id']))->load('stack'));}
+    public function show(Card $card){return new CardResource($card->load('stack'));}
+    public function update(Request $r,Card $card){$card->update($r->validate(['title'=>'sometimes','subtitle'=>'nullable|string','score'=>'sometimes|numeric|min:0|max:100','image'=>'sometimes|nullable|string','deck'=>'sometimes|string','stack_id'=>'sometimes|nullable|exists:stacks,id']));return new CardResource($card->load('stack'));}
+    public function destroy(Card $card){$card->delete();return response()->noContent();}
+}

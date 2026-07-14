@@ -7,6 +7,9 @@
 <div class="form-grid"><form class="panel" method="post" enctype="multipart/form-data" action="{{ $card->exists?route('cms.cards.update',$card):route('cms.cards.store') }}">@csrf @if($card->exists)@method('PUT')@endif
 <div class="field"><label>Title / situation</label><input name="title" required value="{{ old('title',$card->title) }}"></div>
 <div class="field"><label>Description</label><textarea name="subtitle" rows="5">{{ old('subtitle',$card->subtitle) }}</textarea></div>
+<div class="field"><label>Naslov (bosanski)</label><input name="title_bs" value="{{ old('title_bs',$card->title_bs) }}"></div>
+<div class="field"><label>Opis (bosanski)</label><textarea name="subtitle_bs" rows="5">{{ old('subtitle_bs',$card->subtitle_bs) }}</textarea></div>
+<input type="hidden" name="status" value="0"><label style="align-items:center;display:flex;gap:10px;margin-bottom:18px"><input type="checkbox" name="status" value="1" style="width:auto" @checked((bool) old('status',$card->exists ? $card->status : true))> Approved and available in games</label>
 <div class="form-grid"><div class="field"><label>Misery score</label><input name="score" type="number" min="0" max="100" step="0.01" required value="{{ old('score',$card->score ?? 0) }}"></div>
 <div class="field"><label>Stack</label><select name="stack_id" required>@foreach($stacks as $stack)<option value="{{ $stack->id }}" @selected(old('stack_id',$card->stack_id)==$stack->id)>{{ $stack->name }}</option>@endforeach</select></div></div>
 <div class="field"><label>Image URL or storage path</label><input id="imagePath" name="image" value="{{ old('image',$card->image) }}" placeholder="cards/uploads/example.png or https://..."></div>

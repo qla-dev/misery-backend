@@ -65,6 +65,7 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::resource('cards', CmsCardController::class)->except('show');
     Route::post('cards/{card}/generate', [CmsCardController::class, 'generate'])->name('cards.generate');
     Route::post('cards/{card}/generate-svg', [CmsCardController::class, 'generateSvg'])->name('cards.generate-svg');
+    Route::post('cards/{card}/status', [CmsCardController::class, 'setStatus'])->name('cards.status');
     Route::get('generator', [CmsCardGeneratorController::class, 'index'])->name('generator.index');
     Route::post('generator', [CmsCardGeneratorController::class, 'generate'])->name('generator.generate');
     Route::get('stacks', [CmsStackController::class, 'index'])->name('stacks.index');

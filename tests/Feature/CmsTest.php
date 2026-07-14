@@ -33,6 +33,21 @@ class CmsTest extends TestCase
         $this->assertDatabaseHas('cards', ['id' => $card->id, 'title' => 'Worse day', 'deck' => 'normal']);
     }
 
+    public function test_cms_can_approve_and_return_a_card_to_draft(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create(['title' => 'Review me', 'score' => 22.22, 'status' => false, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->post('/cms/cards/'.$card->id.'/status', ['status' => 1])
+            ->assertRedirect()->assertSessionHas('success', 'Card approved.');
+        $this->assertTrue($card->fresh()->status);
+
+        $this->withServerVariables($server)->post('/cms/cards/'.$card->id.'/status', ['status' => 0])
+            ->assertRedirect()->assertSessionHas('success', 'Card returned to draft.');
+        $this->assertFalse($card->fresh()->status);
+    }
+
     public function test_generate_action_saves_black_background_jpeg_path_on_card(): void
     {
         Storage::fake('public');
@@ -41,12 +56,17 @@ class CmsTest extends TestCase
             'services.openrouter.base_url' => 'https://openrouter.ai/api/v1',
             'services.openrouter.image_model' => 'openai/gpt-image-1',
         ]);
-        Http::fake(['openrouter.ai/*' => Http::response(['data' => [['b64_json' => $this->testPngBase64()]]])]);
+        Http::fake(['openrouter.ai/*' => Http::response([
+            'data' => [['b64_json' => $this->testPngBase64()]],
+            'usage' => ['cost' => 0.012345],
+        ])]);
         $stack = Stack::where('slug', 'normal')->firstOrFail();
         $card = Card::create(['title' => 'Flat tire', 'subtitle' => 'In heavy rain', 'score' => 12, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
         $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
 
-        $this->withServerVariables($server)->post('/cms/cards/'.$card->id.'/generate')->assertRedirect();
+        $this->withServerVariables($server)->post('/cms/cards/'.$card->id.'/generate')
+            ->assertRedirect()
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'Cost: $0.012345.'));
         $path = $card->fresh()->image;
         Storage::disk('public')->assertExists($path);
         $this->assertStringEndsWith('.jpg', $path);
@@ -79,7 +99,10 @@ class CmsTest extends TestCase
             && str_contains($request['prompt'], 'always depict at least two clearly visible people')
             && str_contains($request['prompt'], 'Never generate a one-person scene')
             && str_contains($request['prompt'], 'obvious main character and primary victim')
-            && str_contains($request['prompt'], 'the second person must be a supporting character who reacts')
+            && str_contains($request['prompt'], 'give the second person the most natural role required by the situation')
+            && str_contains($request['prompt'], 'do not make the secondary person laugh at, point at, film, tease, celebrate, or mock')
+            && str_contains($request['prompt'], 'Ordinary home, travel, health, work, weather, mechanical, and accident situations')
+            && str_contains($request['prompt'], 'the second person must contribute to the event rather than merely stand nearby and react')
             && str_contains($request['prompt'], 'when the situation naturally affects a pair or group')
             && str_contains($request['prompt'], 'do not default to the main character holding their head')
             && str_contains($request['prompt'], 'situation-specific full-body acting')

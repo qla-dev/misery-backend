@@ -39,6 +39,7 @@ class GameController extends Controller
     {
         $used = DB::table('game_cards')->where('game_id', $game->id)->pluck('card_id');
         $next = Card::whereNotIn('id', $used)
+            ->where('status', true)
             ->when($game->stack_id, fn ($query) => $query->where('stack_id', $game->stack_id))
             ->inRandomOrder()->first();
         if (! $next) {
@@ -201,7 +202,7 @@ class GameController extends Controller
 
             if (! $game->started) {
                 $needed = $memberCount * 3 + 1;
-                $cards = Card::where('stack_id', $game->stack_id)->inRandomOrder()->limit($needed)->get();
+                $cards = Card::where('stack_id', $game->stack_id)->where('status', true)->inRandomOrder()->limit($needed)->get();
                 if ($cards->count() < $needed) {
                     Log::warning('Game start rejected: not enough cards', [
                         'game_id' => $game->id,

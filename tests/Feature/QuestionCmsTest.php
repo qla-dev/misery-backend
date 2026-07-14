@@ -90,6 +90,7 @@ class QuestionCmsTest extends TestCase
         $this->assertSame($before + 10, Card::count());
         $this->assertSame(10, Card::whereIn('title', $titles)->count());
         $this->assertSame(10, Card::whereIn('title', $titles)->where('image', '0')->count());
+        $this->assertSame(10, Card::whereIn('title', $titles)->where('status', false)->count());
 
         Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
             && $request->hasHeader('x-goog-api-key', 'gemini-test-key')

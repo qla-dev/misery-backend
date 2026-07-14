@@ -107,6 +107,7 @@ class CardGeneratorController extends Controller
                     'title' => $candidate['title'],
                     'subtitle' => $candidate['description'],
                     'score' => $candidate['score'],
+                    'status' => false,
                     'image' => '0',
                     'deck' => $stack->slug,
                     'stack_id' => $stack->id,

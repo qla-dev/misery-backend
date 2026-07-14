@@ -24,7 +24,8 @@ class CardController extends Controller
     {
         $cards = Card::with('stack')->when($request->string('q')->toString(), function ($query, $search) {
             $query->where(fn ($q) => $q->where('title', 'like', "%{$search}%")->orWhere('subtitle', 'like', "%{$search}%"));
-        })->orderBy('score')->paginate(25)->withQueryString();
+        })->when($request->filled('status'), fn ($query) => $query->where('status', $request->boolean('status')))
+            ->orderBy('score')->paginate(25)->withQueryString();
 
         return view('cms.cards.index', compact('cards'));
     }
@@ -68,6 +69,14 @@ class CardController extends Controller
         return redirect()->route('cms.cards.index')->with('success', 'Card deleted.');
     }
 
+    public function setStatus(Request $request, Card $card)
+    {
+        $data = $request->validate(['status' => ['required', 'boolean']]);
+        $card->update(['status' => (bool) $data['status']]);
+
+        return back()->with('success', $card->status ? 'Card approved.' : 'Card returned to draft.');
+    }
+
     public function generate(Request $request, Card $card)
     {
         $generationId = (string) Str::uuid();
@@ -102,7 +111,9 @@ class CardController extends Controller
             'Cast requirement: always depict at least two clearly visible people. Use two people by default and add a third only when it materially improves the situation. Never generate a one-person scene.',
             'Multi-person staging: organize the composition around the two primary people. Give each person a distinct pose, clear role, and direct physical or visual relationship to the same event. They must interact with each other, the same prop, or the same cause-and-effect action rather than appearing as unrelated figures.',
             'Character hierarchy: one person must be the obvious main character and primary victim of the misery. Make this person larger, more central, and most visually important. Their pose must clearly show the unfortunate action or consequence.',
-            'Secondary character role: when the misery primarily affects one person, the second person must be a supporting character who reacts to the main victim—for example laughing, pointing, staring, recoiling, filming, helping, causing the accident, or witnessing the embarrassment. Show the reaction only through a clear full-body pose and gesture; faces must remain completely blank.',
+            'Secondary character role: when the misery primarily affects one person, give the second person the most natural role required by the situation: helping, warning, rescuing, serving, operating equipment, being affected by the same problem, unintentionally causing it, or reacting with concern, surprise, fear, or confusion. Show this through clear full-body action; the secondary face must remain completely blank.',
+            'Mocking restriction: do not make the secondary person laugh at, point at, film, tease, celebrate, or mock the main victim by default. Use ridicule or amused audience behavior only when the card title or context explicitly and inherently involves public embarrassment, humiliation, a performance, an audience, or someone recording the incident. Ordinary home, travel, health, work, weather, mechanical, and accident situations should use a practical or empathetic secondary role instead.',
+            'Secondary-character necessity: the second person must contribute to the event rather than merely stand nearby and react. Give them a concrete action, physical connection, shared consequence, or useful story function that helps explain what is happening.',
             'Shared-event exception: when the situation naturally affects a pair or group, both primary people may directly experience or perform the event. Even then, give them distinct roles and poses so the action reads as one connected interaction rather than duplicated figures.',
             'Pose variety rule: do not default to the main character holding their head, putting both hands on their head, covering their face, or standing with symmetrical raised arms. Avoid these cliché poses unless touching the head is literally required by the situation.',
             'Express emotion through situation-specific full-body acting: stumbling backward, freezing mid-action, leaning away, recoiling, dropping an object, reaching toward the problem, bracing against something, pointing in disbelief, kneeling, slipping, twisting, shielding the body, or interacting directly with the hazard. Choose a natural pose that explains this exact event.',
@@ -141,6 +152,7 @@ class CardController extends Controller
         ]);
 
         $providerUsed = 'openrouter';
+        $generationCost = null;
         try {
             $headers = array_filter([
                 'HTTP-Referer' => config('services.openrouter.http_referer'),
@@ -177,6 +189,7 @@ class CardController extends Controller
             ]);
 
             $response = $providerResponse->throw()->json();
+            $generationCost = $this->responseCost($response);
         } catch (RequestException $error) {
             $message = (string) data_get($error->response?->json(), 'error.message', $error->getMessage());
             Log::error('CMS artwork generation provider request failed', $logContext + [
@@ -270,11 +283,28 @@ class CardController extends Controller
             'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             'provider' => $providerUsed,
             'storage_path' => $path,
+            'generation_cost' => $generationCost,
         ]);
 
+        $costMessage = $generationCost !== null
+            ? ' Cost: $'.number_format($generationCost, 6, '.', '').'.'
+            : '';
+
         return back()
-            ->with('success', 'Black-background JPEG artwork generated and saved via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').". [Generation: {$generationId}]")
+            ->with('success', 'Black-background JPEG artwork generated and saved via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').'.'.$costMessage." [Generation: {$generationId}]")
             ->with('generated_prompt', $prompt);
+    }
+
+    private function responseCost(array $response): ?float
+    {
+        foreach (['usage.cost', 'data.0.usage.cost', 'cost'] as $path) {
+            $cost = data_get($response, $path);
+            if (is_numeric($cost)) {
+                return (float) $cost;
+            }
+        }
+
+        return null;
     }
 
     public function generateSvg(Request $request, Card $card)
@@ -792,8 +822,11 @@ class CardController extends Controller
     {
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
+            'title_bs' => ['nullable', 'string', 'max:255'],
             'subtitle' => ['nullable', 'string', 'max:1000'],
+            'subtitle_bs' => ['nullable', 'string', 'max:1000'],
             'score' => ['required', 'numeric', 'min:0', 'max:100'],
+            'status' => ['nullable', 'boolean'],
             'stack_id' => ['required', 'exists:stacks,id'],
             'image' => ['nullable', 'string', 'max:2048'],
             'image_upload' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:8192'],
@@ -802,6 +835,9 @@ class CardController extends Controller
         $data['deck'] = $stack->slug;
         unset($data['image_upload']);
         $data['image'] = trim((string) ($data['image'] ?? '')) ?: '0';
+        $data['status'] = $request->has('status') ? $request->boolean('status') : true;
+        $data['title_bs'] = trim((string) ($data['title_bs'] ?? '')) ?: null;
+        $data['subtitle_bs'] = trim((string) ($data['subtitle_bs'] ?? '')) ?: null;
 
         return $data;
     }
