@@ -47,7 +47,10 @@ class CardSeederTest extends TestCase
         $this->assertSame(100, Card::count());
         $this->assertSame(100, Card::distinct()->count('title'));
         $this->assertSame(100, Card::distinct()->count('score'));
-        $this->assertSame(range(1, 100), Card::orderBy('score')->pluck('score')->map(fn ($score) => (int) $score)->all());
+        $scores = Card::orderBy('score')->pluck('score')->map(fn ($score) => (float) $score);
+        $this->assertGreaterThanOrEqual(1.01, $scores->first());
+        $this->assertSame(99.99, $scores->last());
+        $this->assertTrue($scores->every(fn (float $score) => round($score, 2) !== floor($score)));
         $this->assertDatabaseMissing('cards', ['title' => 'Duplicate old card']);
         $this->assertDatabaseCount('games', 0);
         $this->assertDatabaseCount('members', 0);

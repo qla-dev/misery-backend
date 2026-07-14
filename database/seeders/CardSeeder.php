@@ -145,7 +145,15 @@ class CardSeeder extends Seeder
             range(1, count($rankedScores))
         );
         $events = array_map(static function (array $event) use ($scoreByOriginalValue): array {
-            $event[2] = $scoreByOriginalValue[(string) $event[2]];
+            $rank = $scoreByOriginalValue[(string) $event[2]];
+            if ($rank === 100) {
+                $event[2] = 99.99;
+
+                return $event;
+            }
+            $maximumHundredth = $rank === 99 ? 98 : 99;
+            $hundredth = abs(crc32($event[0])) % $maximumHundredth + 1;
+            $event[2] = $rank + ($hundredth / 100);
 
             return $event;
         }, $events);
