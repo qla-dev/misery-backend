@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Card;
 use App\Models\Question;
+use App\Models\Stack;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
@@ -17,119 +19,113 @@ class QuestionCmsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-
         $this->server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
     }
 
-    public function test_cms_can_create_and_activate_a_question(): void
+    public function test_cms_navigation_replaces_questions_with_card_generator(): void
     {
-        $response = $this->withServerVariables($this->server)->post('/cms/questions', [
-            'question' => 'Which planet is known as the Red Planet?',
-            'answer' => 'Mars',
-            'category' => 'science',
-            'difficulty' => 1,
-            'status' => 1,
+        $this->withServerVariables($this->server)->get('/cms/generator')
+            ->assertOk()
+            ->assertSee('Generate card content')
+            ->assertSee('suggested two-decimal misery scores')
+            ->assertDontSee('Generate questions');
+
+        $this->withServerVariables($this->server)->get('/cms')
+            ->assertOk()
+            ->assertSee('Generator')
+            ->assertDontSee('>Questions<', false);
+    }
+
+    public function test_questions_api_remains_available_for_legacy_clients(): void
+    {
+        Question::create([
+            'question' => 'Visible sports question?', 'answer' => 'Visible',
+            'category' => 'sports', 'difficulty' => 2, 'status' => true,
         ]);
 
-        $question = Question::firstOrFail();
-        $response->assertRedirect(route('cms.questions.edit', $question));
-        $this->assertTrue($question->status);
-        $this->assertSame(hash('sha256', 'which planet is known as the red planet'), $question->normalized_hash);
-    }
-
-    public function test_questions_api_returns_only_active_matching_questions(): void
-    {
-        $this->question('Visible sports question?', 'Visible', 'sports', 2, true);
-        $this->question('Draft sports question?', 'Draft', 'sports', 2, false);
-        $this->question('Visible movie question?', 'Movie', 'movies', 2, true);
-
         $this->getJson('/api/questions?category=sports&difficulty=2')
-            ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.question', 'Visible sports question?')
-            ->assertJsonMissing(['status' => false])
-            ->assertJsonMissing(['status' => true]);
+            ->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.question', 'Visible sports question?');
     }
 
-    public function test_ai_generation_rejects_existing_question_and_saves_exactly_ten_drafts(): void
+    public function test_ai_generator_saves_exactly_ten_unique_cards_with_scores(): void
     {
-        $this->question('Who directed Jaws?', 'Steven Spielberg', 'movies', 2, true);
+        $this->existingCard('Existing disaster');
         config([
             'services.gemini.key' => 'gemini-test-key',
             'services.gemini.base_url' => 'https://generativelanguage.googleapis.com/v1',
             'services.gemini.text_model' => 'gemini-3.1-flash-lite',
         ]);
 
-        $candidates = [
-            ['question' => 'Who directed Jaws?', 'answer' => 'Steven Spielberg'],
-            ['question' => 'Which film won the first Academy Award for Best Picture?', 'answer' => 'Wings'],
-            ['question' => 'What is the fictional African nation in Black Panther?', 'answer' => 'Wakanda'],
-            ['question' => 'Who played the title role in the 1976 film Rocky?', 'answer' => 'Sylvester Stallone'],
-            ['question' => 'Which 1999 film features the character Neo?', 'answer' => 'The Matrix'],
-            ['question' => 'What animated film features a clownfish named Nemo?', 'answer' => 'Finding Nemo'],
-            ['question' => 'Which director created Spirited Away?', 'answer' => 'Hayao Miyazaki'],
-            ['question' => 'What is the name of Han Solo ship?', 'answer' => 'Millennium Falcon'],
-            ['question' => 'Which film series features Katniss Everdeen?', 'answer' => 'The Hunger Games'],
-            ['question' => 'What 1993 dinosaur film was directed by Steven Spielberg?', 'answer' => 'Jurassic Park'],
-            ['question' => 'Which actor portrayed Jack in Titanic?', 'answer' => 'Leonardo DiCaprio'],
-            ['question' => 'What is the subtitle of the second Lord of the Rings film?', 'answer' => 'The Two Towers'],
+        $cards = [['title' => 'Existing disaster', 'description' => 'Duplicate.', 'score' => 44.44]];
+        $titles = [
+            'Airport Shuttle Leaves With Your Luggage',
+            'Sprinkler Activates During the Wedding Toast',
+            'Office Projector Shows Your Private Photos',
+            'Balcony Door Locks You Outside Overnight',
+            'Moving Van Delivers Everything to Another City',
+            'Restaurant Chair Collapses During the Proposal',
+            'Hotel Shower Floods the Room Below',
+            'Drone Drops the Anniversary Gift Into Traffic',
+            'Elevator Opens Directly Into a Costume Party',
+            'Dog Buries Your Rental Car Keys',
+            'Power Cut Traps the Birthday Cake Upstairs',
         ];
-        Http::fake([
-            'generativelanguage.googleapis.com/*' => Http::response([
-                'candidates' => [['content' => ['parts' => [[
-                    'text' => json_encode(['questions' => $candidates]),
-                ]]]]],
-            ]),
-        ]);
+        foreach ($titles as $index => $title) {
+            $cards[] = [
+                'title' => $title,
+                'description' => "A specific unfortunate event number {$index} unfolds in public.",
+                'score' => 26 + $index + 0.37,
+            ];
+        }
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode(['cards' => $cards])]]]]],
+        ])]);
 
-        $this->withServerVariables($this->server)->post('/cms/questions/generate-ai', [
-            'category' => 'movies',
-            'difficulty' => 2,
-        ])->assertRedirect(route('cms.questions.index'))
-            ->assertSessionHas('success');
+        $before = Card::count();
+        $this->withServerVariables($this->server)->post('/cms/generator', [
+            'theme' => 'mixed', 'severity' => 'mixed',
+        ])->assertRedirect(route('cms.cards.index'))->assertSessionHas('success');
 
-        $this->assertSame(11, Question::count());
-        $this->assertSame(10, Question::where('generated_by_ai', true)->where('status', false)->count());
-        $this->assertSame(10, Question::where('generated_by_ai', true)->where('category', 'movies')->where('difficulty', 2)->count());
-        $this->assertSame(1, Question::where('question', 'Who directed Jaws?')->count());
+        $this->assertSame($before + 10, Card::count());
+        $this->assertSame(10, Card::whereIn('title', $titles)->count());
+        $this->assertSame(10, Card::whereIn('title', $titles)->where('image', '0')->count());
 
         Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
             && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
-            && ! isset($request['systemInstruction'])
-            && ! isset($request['generationConfig'])
-            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Who directed Jaws?')
-            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Movies')
-            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Medium')
-            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'JSON Schema'));
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Existing disaster')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'misery score')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'description'));
     }
 
-    public function test_failed_unique_batch_saves_nothing(): void
+    public function test_invalid_or_duplicate_generation_batch_saves_nothing(): void
     {
-        $this->question('What is Earth satellite?', 'The Moon', 'science', 1, true);
-        config([
-            'services.openrouter.key' => 'test-key',
-            'services.openrouter.base_url' => 'https://openrouter.ai/api/v1',
-            'services.openrouter.text_model' => 'test-model',
-        ]);
-        Http::fake([
-            'openrouter.ai/*' => Http::response([
-                'choices' => [['message' => ['content' => json_encode(['questions' => array_fill(0, 10, [
-                    'question' => 'What is Earth satellite?',
-                    'answer' => 'The Moon',
-                ])])]]],
-            ]),
-        ]);
+        config(['services.openrouter.key' => 'test-key', 'services.gemini.key' => null]);
+        $existing = $this->existingCard('Existing duplicate disaster');
+        Http::fake(['openrouter.ai/*' => Http::response([
+            'choices' => [['message' => ['content' => json_encode(['cards' => array_fill(0, 10, [
+                'title' => $existing->title, 'description' => $existing->subtitle, 'score' => 50.55,
+            ])])]]],
+        ])]);
 
-        $this->withServerVariables($this->server)->from('/cms/questions/generate-ai')->post('/cms/questions/generate-ai', [
-            'category' => 'science',
-            'difficulty' => 1,
-        ])->assertRedirect('/cms/questions/generate-ai')->assertSessionHasErrors('generation');
-
-        $this->assertSame(1, Question::count());
+        $before = Card::count();
+        $this->withServerVariables($this->server)->from('/cms/generator')->post('/cms/generator', [
+            'theme' => 'mixed', 'severity' => 'mixed',
+        ])->assertRedirect('/cms/generator')->assertSessionHasErrors('generation');
+        $this->assertSame($before, Card::count());
     }
 
-    private function question(string $question, string $answer, string $category, int $difficulty, bool $status): Question
+    private function existingCard(string $title): Card
     {
-        return Question::create(compact('question', 'answer', 'category', 'difficulty', 'status'));
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+
+        return Card::create([
+            'title' => $title,
+            'subtitle' => 'An existing card description.',
+            'score' => 44.44,
+            'image' => '0',
+            'deck' => $stack->slug,
+            'stack_id' => $stack->id,
+        ]);
     }
 }

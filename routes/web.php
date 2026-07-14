@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\Cms\CardController as CmsCardController;
-use App\Http\Controllers\Cms\QuestionController as CmsQuestionController;
+use App\Http\Controllers\Cms\CardGeneratorController as CmsCardGeneratorController;
 use App\Http\Controllers\Cms\StackController as CmsStackController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -65,9 +65,8 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::resource('cards', CmsCardController::class)->except('show');
     Route::post('cards/{card}/generate', [CmsCardController::class, 'generate'])->name('cards.generate');
     Route::post('cards/{card}/generate-svg', [CmsCardController::class, 'generateSvg'])->name('cards.generate-svg');
-    Route::get('questions/generate-ai', [CmsQuestionController::class, 'generateForm'])->name('questions.generate-form');
-    Route::post('questions/generate-ai', [CmsQuestionController::class, 'generate'])->name('questions.generate');
-    Route::resource('questions', CmsQuestionController::class)->except('show');
+    Route::get('generator', [CmsCardGeneratorController::class, 'index'])->name('generator.index');
+    Route::post('generator', [CmsCardGeneratorController::class, 'generate'])->name('generator.generate');
     Route::get('stacks', [CmsStackController::class, 'index'])->name('stacks.index');
     Route::post('stacks', [CmsStackController::class, 'store'])->name('stacks.store');
     Route::delete('stacks/{stack}', [CmsStackController::class, 'destroy'])->name('stacks.destroy');
