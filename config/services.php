@@ -27,7 +27,7 @@ return [
         'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
         'http_referer' => env('OPENROUTER_HTTP_REFERER', env('APP_URL')),
         'title' => env('OPENROUTER_TITLE', env('APP_NAME', 'Misery Index')),
-        'image_model' => env('OPENROUTER_IMAGE_MODEL', 'openai/gpt-image-1'),
+        'image_model' => env('OPENROUTER_IMAGE_MODEL', 'google/gemini-3.1-flash-image-preview'),
         'text_model' => env('OPENROUTER_TEXT_MODEL', 'openai/gpt-4.1-mini'),
     ],
 

@@ -33,7 +33,7 @@ class CmsTest extends TestCase
         $this->assertDatabaseHas('cards', ['id' => $card->id, 'title' => 'Worse day', 'deck' => 'normal']);
     }
 
-    public function test_generate_action_saves_transparent_png_path_on_card(): void
+    public function test_generate_action_saves_black_background_jpeg_path_on_card(): void
     {
         Storage::fake('public');
         config([
@@ -41,7 +41,7 @@ class CmsTest extends TestCase
             'services.openrouter.base_url' => 'https://openrouter.ai/api/v1',
             'services.openrouter.image_model' => 'openai/gpt-image-1',
         ]);
-        Http::fake(['openrouter.ai/*' => Http::response(['data' => [['b64_json' => base64_encode('png-bytes')]]])]);
+        Http::fake(['openrouter.ai/*' => Http::response(['data' => [['b64_json' => $this->testPngBase64()]]])]);
         $stack = Stack::where('slug', 'normal')->firstOrFail();
         $card = Card::create(['title' => 'Flat tire', 'subtitle' => 'In heavy rain', 'score' => 12, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
         $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
@@ -49,15 +49,16 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)->post('/cms/cards/'.$card->id.'/generate')->assertRedirect();
         $path = $card->fresh()->image;
         Storage::disk('public')->assertExists($path);
-        $this->assertStringEndsWith('.png', $path);
+        $this->assertStringEndsWith('.jpg', $path);
         Http::assertSent(function ($request) {
             $reference = $request['input_references'][0]['image_url']['url'];
             $referencePng = base64_decode(str_replace('data:image/png;base64,', '', $reference), true);
 
             return $request->url() === 'https://openrouter.ai/api/v1/images'
             && $request['model'] === 'openai/gpt-image-1'
-            && $request['background'] === 'transparent'
-            && $request['output_format'] === 'png'
+            && $request['quality'] === 'high'
+            && $request['background'] === 'opaque'
+            && $request['output_format'] === 'jpeg'
             && str_starts_with($reference, 'data:image/png;base64,')
             && is_string($referencePng)
             && str_starts_with($referencePng, "\x89PNG\r\n\x1a\n")
@@ -71,11 +72,11 @@ class CmsTest extends TestCase
             && str_contains($request['prompt'], 'one person, two people, or three people')
             && str_contains($request['prompt'], 'do not force every situation into a one-person scene')
             && str_contains($request['prompt'], 'people and objects must not look like they are floating')
-            && str_contains($request['prompt'], 'road, lane marking, sidewalk, floor')
-            && str_contains($request['prompt'], 'extremely simple, clean, geometric, and vector-like')
-            && str_contains($request['prompt'], 'never compete with the main action')
-            && str_contains($request['prompt'], 'dark #262626 and medium #525252')
-            && str_contains($request['prompt'], 'no larger than 100 KB');
+            && str_contains($request['prompt'], 'smooth antialiased curves')
+            && str_contains($request['prompt'], 'completely opaque, uniform, edge-to-edge')
+            && str_contains($request['prompt'], 'exactly these three colors')
+            && str_contains($request['prompt'], 'pure black #000000')
+            && str_contains($request['prompt'], 'no pixelation');
         });
     }
 
@@ -97,7 +98,7 @@ class CmsTest extends TestCase
                         'parts' => [[
                             'inlineData' => [
                                 'mimeType' => 'image/png',
-                                'data' => base64_encode('gemini-png-bytes'),
+                                'data' => $this->testPngBase64(),
                             ],
                         ]],
                     ],
@@ -121,8 +122,10 @@ class CmsTest extends TestCase
 
             return $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent'
                 && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
-                && ! isset($request['generationConfig'])
-                && str_contains($request['contents'][0]['parts'][1]['text'], '<svg');
+                && $request['generationConfig']['responseModalities'] === ['IMAGE']
+                && $request['generationConfig']['imageConfig']['aspectRatio'] === '1:1'
+                && $request['generationConfig']['imageConfig']['imageSize'] === '2K'
+                && $request['contents'][0]['parts'][2]['inlineData']['mimeType'] === 'image/png';
         });
     }
 
@@ -234,5 +237,17 @@ class CmsTest extends TestCase
         $this->get('/card-images/cards/generated/example.png')
             ->assertOk()
             ->assertHeader('Cache-Control', 'immutable, max-age=31536000, public');
+    }
+
+    private function testPngBase64(): string
+    {
+        $image = imagecreatetruecolor(2, 2);
+        imagefill($image, 0, 0, imagecolorallocate($image, 250, 204, 21));
+        ob_start();
+        imagepng($image);
+        $png = ob_get_clean();
+        imagedestroy($image);
+
+        return base64_encode($png);
     }
 }
