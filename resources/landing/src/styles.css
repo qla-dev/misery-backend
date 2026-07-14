@@ -21,6 +21,16 @@
 .main-card-score b{font-family:'Bebas Neue';font-size:36px;font-weight:400;line-height:1}
 .hero-card .main-card-artwork{background:#000}
 .hero-card .main-card-heading{visibility:hidden}
+.ticker{height:64px;padding:0}
+.floating-score b{font-size:44px}
+.game-card-back{background:linear-gradient(180deg,#2b2205 0,#12100a 48%,#050505 100%);justify-content:center}
+.game-card-back:before{border-color:rgba(251,191,36,.55)}
+.card-back-logo{align-items:center;display:flex;flex-direction:column;font-family:'Outfit','DM Sans',sans-serif;font-size:54px;font-weight:900;justify-content:center;letter-spacing:-3px;line-height:54px;position:relative;z-index:2}
+.card-back-logo-main{align-items:center;color:var(--amber);display:flex;height:54px;justify-content:center}
+.card-back-logo strong{color:white;font-size:54px;line-height:54px;margin-top:-13px}
+.card-back-mascot{display:inline-block;height:78px;margin:-44px -3px 0;transform:translateX(4px);width:38px}
+.card-back-mascot svg{height:100%!important;overflow:visible!important;width:100%!important}
+.game-card-back>small{bottom:28px;color:rgba(251,191,36,.7);font-family:'Space Mono';font-size:8px;font-weight:900;left:20px;letter-spacing:2.4px;position:absolute;right:20px;text-align:center;z-index:2}
 .gallery-card .main-game-card{min-height:445px;width:285px}
 @media(max-width:700px){.guess-stage .main-game-card{min-height:430px;width:280px}.main-card-artwork{height:205px;width:205px}.gallery-card .main-game-card{width:275px}}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}

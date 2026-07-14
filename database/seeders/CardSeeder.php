@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Storage;
 
 class CardSeeder extends Seeder
 {
+    protected bool $scoresOnly = false;
+
     public function run(): void
     {
         $normal = Stack::firstOrCreate(['slug' => 'normal'], ['name' => 'Normal']);
@@ -138,25 +140,138 @@ class CardSeeder extends Seeder
             ['A Meteorite Punches Through Your Roof', 'The impossible rock misses you, destroys the house, and starts smoking.', 96.1],
         ];
 
-        $rankedScores = array_values(array_unique(array_column($events, 2)));
-        sort($rankedScores, SORT_NUMERIC);
-        $scoreByOriginalValue = array_combine(
-            array_map(static fn (float $score): string => (string) $score, $rankedScores),
-            range(1, count($rankedScores))
-        );
-        $events = array_map(static function (array $event) use ($scoreByOriginalValue): array {
-            $rank = $scoreByOriginalValue[(string) $event[2]];
-            if ($rank === 100) {
-                $event[2] = 99.99;
+        // Explicitly ranked after comparing the consequence described on every card.
+        // The order moves from embarrassment/inconvenience through lasting loss and
+        // financial damage to situations with immediate risk to life.
+        $severityOrder = [
+            'Lose a Contact Lens Before a Live Interview',
+            'Your Trousers Split Open on Stage',
+            'Get a Nosebleed in a White Wedding Suit',
+            'Throw a Surprise Party for the Wrong Person',
+            'Your Card Is Declined at an Anniversary Dinner',
+            'A Horse Throws You Into Mud Before a Ceremony',
+            'Use the Wrong Name in a Wedding Speech',
+            'Your Parrot Repeats a Secret at Family Dinner',
+            'Your Dog Destroys the Wedding Cake',
+            'Wedding Cake Collapses Before the Ceremony',
+            'A Skunk Sprays the Wedding Clothes',
+            'Send a Complaint About Someone Directly to Them',
+            'Send a Private Screenshot Back to Its Subject',
+            'Your Microphone Stays Live While Insulting a Client',
+            'The DJ Plays Your Private Voice Note',
+            'Autocorrect Sends a Resignation to Your Boss',
+            'Break a Front Tooth on a First Date',
+            'Swallow a Dental Crown Before an Interview',
+            'Computer Crashes During a Live Keynote',
+            'Your Cat Deletes the Final Manuscript',
+            'Smart Lock Battery Dies in Heavy Rain',
+            'Hotel Loses Your Reservation During a Festival',
+            'The Refrigerator Dies While You Are Away',
+            'A Raccoon Gets Trapped in Your Kitchen',
+            'Find a Snake in the Shower',
+            'Your Phone Dies in an Unfamiliar City',
+            'Your Dog Eats Your Passport',
+            'A Seagull Steals Your Car Keys',
+            'Order One Hundred Appliances by Mistake',
+            'Arrive at the Wrong Airport',
+            'Miss the Last Ferry Off the Island',
+            'Air Conditioning Fails in a Record Heatwave',
+            'Rental Car Gets Towed Abroad',
+            'Wash an Envelope Full of Cash',
+            'Lose the Proposal Ring in the Sea',
+            'Drop the Wedding Ring Down a Drain',
+            'Power Fails at a Two-Hundred-Guest Reception',
+            'The Wedding Venue Locks Everyone Outside',
+            'Sewage Backs Up During a Dinner Party',
+            'A Pipe Bursts Above Your Bedroom',
+            'Your Tent Floods in the Night',
+            'Camera Card Corrupts After a Once-in-a-Lifetime Trip',
+            'Cloud Sync Overwrites Every Family Photo',
+            'Delete Your Finished Thesis Without a Backup',
+            'Laptop Is Stolen Before the Big Presentation',
+            'Email the Salary Spreadsheet to the Whole Company',
+            'Your Ex Sends Old Screenshots to Your Partner',
+            'Live Television Reveals Your Biggest Secret',
+            'Send a Private Photo to the Family Group',
+            'Accidentally Livestream a Therapy Session',
+            'Accidentally Win an Auction You Cannot Afford',
+            'Get Audited After Losing Every Receipt',
+            'Lose Your Wallet in a Foreign Country',
+            'Lose Your Passport at the Boarding Gate',
+            'Get Food Poisoning on a Long Flight',
+            'Your Pet Escapes at the Airport',
+            'Airline Loses the Bag With Your Medicine',
+            'Your Surgery Is Cancelled After Months of Waiting',
+            'Get Trapped in an Elevator for Twelve Hours',
+            'Your Kayak Drifts Away From Shore',
+            'Sneeze While a Barber Holds a Razor',
+            'A Bee Swarm Gets Trapped in Your Car',
+            'A Giant Aquarium Breaks in Your Apartment',
+            'Your Drone Crashes Into a Stadium Scoreboard',
+            'Fire Sprinklers Destroy an Art Exhibition',
+            'Bank Freezes Your Accounts While You Are Abroad',
+            'Discover Someone Stole Your Identity',
+            'Home Automation Unlocks Every Door on Vacation',
+            'Heating Fails During a Blizzard',
+            'Have an Allergic Reaction at a Restaurant',
+            'Windshield Shatters While Driving',
+            'Engine Dies Inside a Long Tunnel',
+            'Tire Explodes on a Busy Highway',
+            'Run Out of Fuel in the Desert',
+            'Twist Your Ankle on a Mountain Without Signal',
+            'Navigation Sends You Onto a Closed Mountain Road',
+            'A Ski Lift Stops in an Incoming Storm',
+            'An Avalanche Blocks the Only Road',
+            'Ransomware Locks Every Company File',
+            'Erase the Production Database',
+            'Payroll Sends Everyone Double From Your Account',
+            'Wire Your House Deposit to the Wrong Account',
+            'Total Your Car the Day Insurance Expires',
+            'Basement Floods With Every Family Album',
+            'A Tree Crushes Your Car and Garage',
+            'A Storm Tears Open Your Roof',
+            'A Sinkhole Swallows Your Driveway and Car',
+            'A Crane Drops a Hot Tub Through Your Roof',
+            'A Meteorite Punches Through Your Roof',
+            'A Gas Barbecue Erupts During the Party',
+            'Fireworks Ignite the Garden Shed',
+            'An Oven Fire Takes Over the Kitchen',
+            'Ceiling Collapses During Dinner',
+            'A Chandelier Falls Into the Dinner Table',
+            'A Bear Finds the Food Inside Your Campsite',
+            'Lightning Strikes Beside Your Tent',
+            'Stage Pyrotechnics Set Your Costume on Fire',
+            'A Moving Truck Rolls Downhill',
+            'Boat Engine Dies as a Storm Arrives',
+            'A Flash Flood Rushes Into the Canyon',
+        ];
 
-                return $event;
-            }
-            $maximumHundredth = $rank === 99 ? 98 : 99;
-            $hundredth = abs(crc32($event[0])) % $maximumHundredth + 1;
+        $eventTitles = array_column($events, 0);
+        if (count($severityOrder) !== count($events)
+            || count(array_unique($severityOrder)) !== count($severityOrder)
+            || array_diff($eventTitles, $severityOrder)
+            || array_diff($severityOrder, $eventTitles)) {
+            throw new \LogicException('Card severity order must contain every seeded card exactly once.');
+        }
+
+        $rankByTitle = array_flip($severityOrder);
+        $events = array_map(static function (array $event) use ($rankByTitle): array {
+            $rank = $rankByTitle[$event[0]];
+            $hundredth = $rank === 99 ? 99 : abs(crc32($event[0])) % 99 + 1;
             $event[2] = $rank + ($hundredth / 100);
 
             return $event;
         }, $events);
+
+        if ($this->scoresOnly) {
+            DB::transaction(function () use ($events) {
+                foreach ($events as $event) {
+                    Card::query()->where('title', $event[0])->update(['score' => $event[2]]);
+                }
+            });
+
+            return;
+        }
 
         DB::transaction(function () use ($events, $normal) {
             DB::table('moves')->delete();

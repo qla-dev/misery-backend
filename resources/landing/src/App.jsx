@@ -128,7 +128,7 @@ function LegacyGameCard({ card, hidden = false, className = '', animatedArtwork 
     <div className="card-top"><span>MISERY</span><span>MM–{String(Math.round((card.score || 0) * 10)).padStart(3, '0')}</span></div>
     <div className="art-disc">{animatedArtwork || className.includes('hero-card') || card.icon === 'lightning' ? <MascotLetter className="card-mascot"/> : <Pictogram type={card.icon}/>}</div>
     <div className="card-copy"><p>{card.title}</p>{card.sub && <small>{card.sub}</small>}</div>
-    <div className={`score-orbit ${hidden ? 'hidden-score' : ''}`}><b>{hidden ? '?' : card.score}</b><span>MISERY RATE</span></div>
+    <div className={`score-orbit ${hidden ? 'hidden-score' : ''}`}><b>{hidden ? '?.??' : Number(card.score).toFixed(2)}</b><span>MISERY RATE</span></div>
   </article>;
 }
 
@@ -148,8 +148,18 @@ function GameCard({ card, hidden = false, className = '', logoArtwork = false })
     </div>
     <div className="main-card-score">
       <span>MISERY RATE</span>
-      <div><b>{hidden ? '??.?' : Number(card.score).toFixed(1)}</b></div>
+      <div><b>{hidden ? '?.??' : Number(card.score).toFixed(2)}</b></div>
     </div>
+  </article>;
+}
+
+function GameCardBack({ className = '' }) {
+  return <article className={`game-card main-game-card game-card-back ${className}`} aria-label="Face-down Misery Meter card">
+    <div className="card-back-logo">
+      <div className="card-back-logo-main"><span>M</span><MascotLetter className="card-back-mascot"/><span>SERY</span></div>
+      <strong>METER</strong>
+    </div>
+    <small>TAP CARD TO REVEAL</small>
   </article>;
 }
 
@@ -258,9 +268,9 @@ export default function App() {
     <header className="site-header"><Brand/><nav className={menu?'open':''}>{links.map(([href,label])=><a href={href} key={href} onClick={()=>setMenu(false)}>{label}</a>)}</nav><div className="header-actions"><button className="language" onClick={()=>setLang(lang==='bs'?'en':'bs')}><Globe2 size={15}/>{lang==='bs'?'BS':'EN'}</button><StoreButtons compact lang={lang} platformAware/><button className="menu-button" onClick={()=>setMenu(!menu)}>{menu?<X/>:<Menu/>}</button></div></header>
 
     <main>
-      <section className="hero" id="game"><div className="hero-grid"/><div className="hero-copy"><p className="kicker"><span/> {t.eyebrow}</p><h1><span>{t.heroA}</span><em>{t.heroB}</em></h1><p className="hero-lead">{t.hero}</p><div className="hero-buttons"><a className="primary-button" href="#playground">{t.play}<Zap size={18}/></a><StoreButtons lang={lang} platformAware/></div><div className="hero-stats"><div><b>100+</b><span>CARDS</span></div><div><b>2–5</b><span>PLAYERS</span></div><div><b>20′</b><span>CHAOS</span></div></div></div><div className="hero-deck"><div className="halo"/><GameCard card={scenarioPool[2 % scenarioPool.length]} className="card-back-left"/><GameCard card={scenarioPool[0]} className="card-back-right"/><GameCard card={scenario} hidden logoArtwork className="hero-card"/><div className="floating-score"><span>SECRET</span><b>?</b><small>MISERY RATE</small></div></div><a className="scroll-cue" href="#playground"><span>{t.scroll}</span><ArrowDown/></a></section>
+      <section className="hero" id="game"><div className="hero-grid"/><div className="hero-copy"><p className="kicker"><span/> {t.eyebrow}</p><h1><span>{t.heroA}</span><em>{t.heroB}</em></h1><p className="hero-lead">{t.hero}</p><div className="hero-buttons"><a className="primary-button" href="#playground">{t.play}<Zap size={18}/></a><StoreButtons lang={lang} platformAware/></div><div className="hero-stats"><div><b>100+</b><span>CARDS</span></div><div><b>2–5</b><span>PLAYERS</span></div><div><b>20′</b><span>CHAOS</span></div></div></div><div className="hero-deck"><div className="halo"/><GameCard card={scenarioPool[2 % scenarioPool.length]} className="card-back-left"/><GameCard card={scenarioPool[0]} className="card-back-right"/><GameCardBack className="hero-card"/><div className="floating-score"><span>SECRET</span><b>?.??</b><small>MISERY RATE</small></div></div><a className="scroll-cue" href="#playground"><span>{t.scroll}</span><ArrowDown/></a></section>
 
-      <div className="ticker"><div>{Array.from({length:2}).flatMap((_,i)=>['LOSE YOUR KEYS','✦','MISS A FLIGHT','✦','SPILL COFFEE','✦','STEAL THE CARD','✦'].map((x,j)=><span key={`${i}-${j}`}>{x}</span>))}</div></div>
+      <div className="ticker" aria-hidden="true"/>
 
       <section className="playground" id="playground"><div className="section-heading"><p className="kicker">{t.labTag}</p><h2>{t.labTitle}</h2><p>{t.labText}</p></div><div className="guess-stage"><div className="guess-card-wrap"><GameCard card={scenario} hidden={!revealed} className={revealed?'revealed':''}/></div><div className="meter-panel"><div className="meter-labels"><span>BARELY BAD</span><span>ABSOLUTE MISERY</span></div><div className="meter-track"><div className="meter-fill" style={{width:`${guess}%`}}/><input aria-label="Misery guess" type="range" min="0" max="100" value={guess} onChange={e=>{setGuess(Number(e.target.value));setRevealed(false)}}/><div className="meter-ticks">{[0,20,40,60,80,100].map(x=><i key={x} style={{left:`${x}%`}}><span>{x}</span></i>)}</div></div><div className="guess-readout"><div><span>{t.yourGuess}</span><b>{guess}</b></div>{revealed&&<><div className="score-divider"/><div className="actual"><span>{t.actual}</span><b>{scenario.score}</b></div></>}</div>{revealed&&<p className={`verdict ${delta<8?'great':''}`}>{verdict}</p>}<button className="primary-button full" onClick={()=>revealed?nextScenario():setRevealed(true)}>{revealed?t.again:t.reveal}{revealed?<RotateCcw size={18}/>:<Sparkles size={18}/>}</button></div></div></section>
 
