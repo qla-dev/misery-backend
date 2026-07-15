@@ -47,7 +47,7 @@ class RevenueCatController extends Controller
         } else {
             $productId = (string) $entitlement['product_identifier'];
             $user->forceFill([
-                'pro_status' => self::PRODUCTS[$productId],
+                'pro_status' => $this->planForProduct($productId),
                 'pro_started_at' => $entitlement['purchase_date'] ?? null,
                 'pro_ends_at' => $entitlement['expires_date'] ?? null,
                 'revenuecat_product_id' => $productId,
@@ -83,10 +83,20 @@ class RevenueCatController extends Controller
     private function isActivePro(array $entitlement): bool
     {
         $productId = (string) ($entitlement['product_identifier'] ?? '');
-        if (!isset(self::PRODUCTS[$productId])) return false;
+        if (! $this->planForProduct($productId)) return false;
         $expiresAt = $entitlement['expires_date'] ?? null;
 
         return !$expiresAt || now()->lt($expiresAt);
+    }
+
+    private function planForProduct(string $productId): ?string
+    {
+        if (isset(self::PRODUCTS[$productId])) return self::PRODUCTS[$productId];
+        $normalized = strtolower($productId);
+        if (str_contains($normalized, 'year') || str_contains($normalized, 'annual')) return 'yearly';
+        if (str_contains($normalized, 'month')) return 'monthly';
+
+        return null;
     }
 
     private function formatUser($user): array
