@@ -14,6 +14,21 @@ class GameDeckSelectionTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_room_remembers_the_pack_selected_by_the_host_before_players_join(): void
+    {
+        $spicy = Stack::where('slug', 'spicy')->firstOrFail();
+
+        $response = $this->postJson('/api/games', [
+            'name' => 'Host',
+            'color' => 'yellow',
+            'stack' => 'spicy',
+        ])->assertCreated()
+            ->assertJsonPath('game.stack', 'spicy');
+
+        $gameId = $response->json('game.id');
+        $this->assertDatabaseHas('games', ['id' => $gameId, 'stack_id' => $spicy->id]);
+    }
+
     public function test_start_and_later_draws_use_only_random_cards_from_the_selected_stack(): void
     {
         $normal = Stack::where('slug', 'normal')->firstOrFail();

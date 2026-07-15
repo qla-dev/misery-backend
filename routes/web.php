@@ -69,7 +69,9 @@ Route::get('/misery-og.png', function () {
         'Content-Type' => 'image/png',
     ]);
 })->name('landing.og-image');
-Route::view('/simulator', 'play')->middleware('cms.auth')->name('simulator');
+Route::get('/simulator', fn () => view('play', [
+    'stacks' => \App\Models\Stack::query()->orderBy('name')->get(['name', 'slug']),
+]))->middleware('cms.auth')->name('simulator');
 Route::get('/card-images/{path}', function (string $path) {
     abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
     abort_unless(Storage::disk('public')->exists($path), 404);

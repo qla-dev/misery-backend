@@ -11,6 +11,7 @@ use App\Models\Card;
 use App\Models\Game;
 use App\Models\GameMessage;
 use App\Models\Move;
+use App\Models\Stack;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -189,11 +190,20 @@ class GameController extends Controller
 
     public function store(Request $request)
     {
-        $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'nullable|email', 'color' => 'nullable|in:'.implode(',', self::COLORS)]);
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'nullable|email',
+            'color' => 'nullable|in:'.implode(',', self::COLORS),
+            'stack' => 'sometimes|string|exists:stacks,slug',
+        ]);
+        $stack = Stack::where('slug', $data['stack'] ?? 'normal')->firstOrFail();
 
-        return DB::transaction(function () use ($data) {
-            $data['color'] = $data['color'] ?? self::COLORS[0];
-            $user = User::create($data);
+        return DB::transaction(function () use ($data, $stack) {
+            $user = User::create([
+                'name' => $data['name'],
+                'email' => $data['email'] ?? null,
+                'color' => $data['color'] ?? self::COLORS[0],
+            ]);
             do {
                 $letters = '';
                 for ($i = 0; $i < 4; $i++) {
@@ -203,7 +213,7 @@ class GameController extends Controller
                 shuffle($chars);
                 $code = implode($chars);
             } while (Game::whereCode($code)->exists());
-            $game = Game::create(['code' => $code, 'owner_id' => $user->id]);
+            $game = Game::create(['code' => $code, 'owner_id' => $user->id, 'stack_id' => $stack->id]);
             $game->members()->attach($user);
 
             return response()->json(['game' => $this->full($game), 'user' => new UserResource($user)], 201);
