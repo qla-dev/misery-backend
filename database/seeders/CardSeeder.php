@@ -3,11 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\Card;
-use App\Models\Game;
 use App\Models\Stack;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class CardSeeder extends Seeder
 {
@@ -336,53 +334,26 @@ class CardSeeder extends Seeder
         }
 
         DB::transaction(function () use ($adult, $adultEvents, $events, $normal, $spicy, $spicyEvents) {
-            DB::table('moves')->delete();
-            DB::table('game_cards')->delete();
-            DB::table('members')->delete();
-            Game::query()->delete();
-            Card::query()->delete();
+            $seedPack = static function (Stack $stack, string $deck, array $packEvents): void {
+                foreach ($packEvents as $event) {
+                    Card::query()->updateOrCreate(
+                        ['title' => $event[0], 'stack_id' => $stack->id],
+                        [
+                            'subtitle' => $event[1],
+                            'score' => $event[2],
+                            'deck' => $deck,
+                            'status' => true,
+                        ],
+                    );
+                }
+            };
 
-            $now = now();
-            Card::query()->insert(array_map(fn (array $event) => [
-                'title' => $event[0],
-                'subtitle' => $event[1],
-                'score' => $event[2],
-                'image' => '0',
-                'svg_img' => null,
-                'deck' => 'normal',
-                'stack_id' => $normal->id,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ], $events));
-            Card::query()->insert(array_map(fn (array $event) => [
-                'title' => $event[0],
-                'subtitle' => $event[1],
-                'score' => $event[2],
-                'image' => '0',
-                'svg_img' => null,
-                'deck' => '18-plus',
-                'stack_id' => $adult->id,
-                'status' => true,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ], $adultEvents));
-            Card::query()->insert(array_map(fn (array $event) => [
-                'title' => $event[0],
-                'subtitle' => $event[1],
-                'score' => $event[2],
-                'image' => '0',
-                'svg_img' => null,
-                'deck' => 'spicy',
-                'stack_id' => $spicy->id,
-                'status' => true,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ], $spicyEvents));
+            // Artwork, translations, games and runtime rows are user data. A content
+            // seed may update the seeded copy and score, but must never delete them.
+            $seedPack($normal, 'normal', $events);
+            $seedPack($adult, '18-plus', $adultEvents);
+            $seedPack($spicy, 'spicy', $spicyEvents);
         });
-
-        Storage::disk('public')->deleteDirectory('cards/generated');
-        Storage::disk('public')->deleteDirectory('cards/generated-svg');
-        Storage::disk('public')->deleteDirectory('cards/uploads');
     }
 
     private function expandPremiumEvents(array $events, string $tone): array

@@ -17,13 +17,13 @@ class CardSeederTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_card_reseed_replaces_cards_and_clears_all_game_runtime_rows(): void
+    public function test_card_reseed_updates_content_without_deleting_artwork_or_game_runtime_rows(): void
     {
         Storage::fake('public');
         $stack = Stack::where('slug', 'normal')->firstOrFail();
         $card = Card::create([
-            'title' => 'Duplicate old card',
-            'subtitle' => 'This must disappear.',
+            'title' => 'Lose Your Passport at the Boarding Gate',
+            'subtitle' => 'Old seeded copy.',
             'score' => 50,
             'image' => 'cards/generated/old.png',
             'svg_img' => 'cards/generated-svg/old.svg',
@@ -89,13 +89,16 @@ class CardSeederTest extends TestCase
                 (float) $checkpointScores[$severityCheckpoints[$index]]
             );
         }
-        $this->assertDatabaseMissing('cards', ['title' => 'Duplicate old card']);
-        $this->assertDatabaseCount('games', 0);
-        $this->assertDatabaseCount('members', 0);
-        $this->assertDatabaseCount('game_cards', 0);
-        $this->assertDatabaseCount('moves', 0);
-        Storage::disk('public')->assertMissing('cards/generated/old.png');
-        Storage::disk('public')->assertMissing('cards/generated-svg/old.svg');
+        $card->refresh();
+        $this->assertSame('cards/generated/old.png', $card->image);
+        $this->assertSame('cards/generated-svg/old.svg', $card->svg_img);
+        $this->assertNotSame('Old seeded copy.', $card->subtitle);
+        $this->assertDatabaseCount('games', 1);
+        $this->assertDatabaseCount('members', 1);
+        $this->assertDatabaseCount('game_cards', 1);
+        $this->assertDatabaseCount('moves', 1);
+        Storage::disk('public')->assertExists('cards/generated/old.png');
+        Storage::disk('public')->assertExists('cards/generated-svg/old.svg');
     }
 
     public function test_score_only_seed_preserves_cards_artwork_and_games(): void
