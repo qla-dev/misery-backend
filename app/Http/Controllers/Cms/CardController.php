@@ -77,6 +77,142 @@ class CardController extends Controller
         return back()->with('success', $card->status ? 'Card approved.' : 'Card returned to draft.');
     }
 
+    public function translateToBosnian(Request $request, Card $card)
+    {
+        $source = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'subtitle' => ['nullable', 'string', 'max:1000'],
+        ]);
+        $source['title'] = trim($source['title']);
+        $source['subtitle'] = trim((string) ($source['subtitle'] ?? ''));
+
+        abort_if(
+            ! config('services.gemini.key') && ! config('services.openrouter.key'),
+            422,
+            'GEMINI_API_KEY and OPENROUTER_API_KEY are not configured on the backend.'
+        );
+
+        $prompt = $this->bosnianTranslationPrompt($source['title'], $source['subtitle']);
+        $providers = [];
+        if (config('services.gemini.key')) {
+            $providers['Gemini'] = fn () => $this->translateWithGemini($prompt);
+        }
+        if (config('services.openrouter.key')) {
+            $providers['OpenRouter'] = fn () => $this->translateWithOpenRouter($prompt);
+        }
+
+        $lastError = null;
+        foreach ($providers as $provider => $translate) {
+            try {
+                $translation = $this->decodeBosnianTranslation($translate(), $source['subtitle'] !== '');
+
+                Log::info('CMS card translated to Bosnian', [
+                    'card_id' => $card->id,
+                    'provider' => $provider,
+                ]);
+
+                return response()->json($translation + ['provider' => $provider]);
+            } catch (Throwable $error) {
+                $lastError = $error;
+                Log::warning('CMS Bosnian card translation provider failed', [
+                    'card_id' => $card->id,
+                    'provider' => $provider,
+                    'exception' => $error,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'message' => 'AI translation failed: '.($lastError?->getMessage() ?: 'No provider returned a valid Bosnian translation.'),
+        ], 502);
+    }
+
+    private function bosnianTranslationPrompt(string $title, string $subtitle): string
+    {
+        return implode("\n", [
+            'Translate this Misery Meter game-card copy from English into standard BOSNIAN (language code bs).',
+            'The target language is specifically Bosnian, not Croatian and not Serbian.',
+            'Use natural contemporary Bosnian in the ijekavian standard. Avoid Croatian-only wording, Serbian ekavian forms, and unnatural literal calques.',
+            'Pay exceptional attention to Bosnian grammar, cases, gender, number, agreement, word order, idiom, and punctuation.',
+            'Use the Bosnian Latin alphabet correctly. Preserve every diacritic and especially distinguish the affricates č, ć, dž and đ. Never replace them with c, dj, dz, or approximate spellings.',
+            'Keep the same meaning, severity, humor, point of view, names, numbers, and factual details. Do not add, remove, soften, censor, or explain content.',
+            'The title must remain concise and instantly readable on a game card. The description must remain one natural sentence when the English source has a description.',
+            'Silently proofread the final Bosnian for grammar and correct affricates before returning it.',
+            'Return only valid UTF-8 JSON with exactly these keys: title_bs and subtitle_bs. Use null for subtitle_bs only when the English subtitle is empty.',
+            '',
+            'English title: '.$title,
+            'English description: '.($subtitle !== '' ? $subtitle : '(empty)'),
+        ]);
+    }
+
+    private function translateWithGemini(string $prompt): string
+    {
+        $model = (string) config('services.gemini.text_model');
+        $response = Http::withHeaders(['x-goog-api-key' => config('services.gemini.key')])
+            ->acceptJson()->asJson()->timeout(120)
+            ->post(rtrim((string) config('services.gemini.base_url'), '/').'/models/'.rawurlencode($model).':generateContent', [
+                'contents' => [['role' => 'user', 'parts' => [['text' => $prompt]]]],
+                'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.2],
+            ])->throw()->json();
+
+        $content = implode('', array_map(
+            fn ($part) => is_string(data_get($part, 'text')) ? data_get($part, 'text') : '',
+            (array) data_get($response, 'candidates.0.content.parts', [])
+        ));
+        throw_if($content === '', RuntimeException::class, 'Gemini returned no translation.');
+
+        return $content;
+    }
+
+    private function translateWithOpenRouter(string $prompt): string
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'title_bs' => ['type' => 'string'],
+                'subtitle_bs' => ['type' => ['string', 'null']],
+            ],
+            'required' => ['title_bs', 'subtitle_bs'],
+            'additionalProperties' => false,
+        ];
+        $response = Http::withToken(config('services.openrouter.key'))
+            ->withHeaders(array_filter([
+                'HTTP-Referer' => config('services.openrouter.http_referer'),
+                'X-Title' => config('services.openrouter.title'),
+            ]))->acceptJson()->asJson()->timeout(120)
+            ->post(rtrim((string) config('services.openrouter.base_url'), '/').'/chat/completions', [
+                'model' => config('services.openrouter.text_model'),
+                'messages' => [
+                    ['role' => 'system', 'content' => 'You are a meticulous professional translator into standard Bosnian. Return only the requested JSON.'],
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+                'temperature' => 0.2,
+                'response_format' => ['type' => 'json_schema', 'json_schema' => [
+                    'name' => 'bosnian_card_translation', 'strict' => true, 'schema' => $schema,
+                ]],
+            ])->throw()->json();
+
+        $content = data_get($response, 'choices.0.message.content');
+        throw_unless(is_string($content) && $content !== '', RuntimeException::class, 'OpenRouter returned no translation.');
+
+        return $content;
+    }
+
+    private function decodeBosnianTranslation(string $content, bool $subtitleRequired): array
+    {
+        $json = trim(preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content)) ?? trim($content));
+        $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        $title = trim((string) data_get($decoded, 'title_bs', ''));
+        $subtitleValue = data_get($decoded, 'subtitle_bs');
+        $subtitle = is_string($subtitleValue) ? trim($subtitleValue) : null;
+
+        throw_if($title === '' || mb_strlen($title) > 255, RuntimeException::class, 'AI returned an invalid Bosnian title.');
+        throw_if($subtitleRequired && ($subtitle === null || $subtitle === ''), RuntimeException::class, 'AI returned no Bosnian description.');
+        throw_if($subtitle !== null && mb_strlen($subtitle) > 1000, RuntimeException::class, 'AI returned a Bosnian description that is too long.');
+
+        return ['title_bs' => $title, 'subtitle_bs' => $subtitleRequired ? $subtitle : null];
+    }
+
     public function generate(Request $request, Card $card)
     {
         $generationId = (string) Str::uuid();

@@ -48,6 +48,51 @@ class CmsTest extends TestCase
         $this->assertFalse($card->fresh()->status);
     }
 
+    public function test_cms_ai_translation_explicitly_requests_standard_bosnian_and_returns_editable_copy(): void
+    {
+        config([
+            'services.gemini.key' => 'gemini-translation-key',
+            'services.gemini.base_url' => 'https://generativelanguage.googleapis.com/v1',
+            'services.gemini.text_model' => 'gemini-test-model',
+            'services.openrouter.key' => null,
+        ]);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => json_encode([
+                    'title_bs' => 'Probušena guma usred oluje',
+                    'subtitle_bs' => 'Čekaš pomoć dok kiša pojačava.',
+                ], JSON_UNESCAPED_UNICODE)]]]]],
+            ]),
+        ]);
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create([
+            'title' => 'Flat tire in a storm',
+            'subtitle' => 'You wait for help while the rain gets heavier.',
+            'score' => 22.22,
+            'deck' => 'normal',
+            'stack_id' => $stack->id,
+        ]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->postJson('/cms/cards/'.$card->id.'/translate-bs', [
+            'title' => $card->title,
+            'subtitle' => $card->subtitle,
+        ])->assertOk()
+            ->assertJsonPath('title_bs', 'Probušena guma usred oluje')
+            ->assertJsonPath('subtitle_bs', 'Čekaš pomoć dok kiša pojačava.')
+            ->assertJsonPath('provider', 'Gemini');
+
+        $this->assertNull($card->fresh()->title_bs);
+        Http::assertSent(function ($request) {
+            $prompt = $request['contents'][0]['parts'][0]['text'];
+
+            return str_contains($prompt, 'specifically Bosnian, not Croatian and not Serbian')
+                && str_contains($prompt, 'ijekavian standard')
+                && str_contains($prompt, 'č, ć, dž and đ')
+                && str_contains($prompt, 'grammar, cases, gender, number, agreement');
+        });
+    }
+
     public function test_generate_action_saves_black_background_jpeg_path_on_card(): void
     {
         Storage::fake('public');

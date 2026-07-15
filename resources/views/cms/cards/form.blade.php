@@ -9,10 +9,11 @@
 @php($cropImage = $showCropper ? url('/card-images/'.preg_replace('#^storage/#','',data_get($cropArtwork, 'path'))) : $image)
 <div class="toolbar"><div><h1>{{ $card->exists?'Edit card':'New card' }}</h1><p class="hint">Artwork uses the image first and the native dummy illustration as fallback.</p></div><a class="btn secondary" href="{{ route('cms.cards.index') }}">Back</a></div>
 <div class="form-grid"><form class="panel" method="post" enctype="multipart/form-data" action="{{ $card->exists?route('cms.cards.update',$card):route('cms.cards.store') }}">@csrf @if($card->exists)@method('PUT')@endif
-<div class="field"><label>Title / situation</label><input name="title" required value="{{ old('title',$card->title) }}"></div>
-<div class="field"><label>Description</label><textarea name="subtitle" rows="5">{{ old('subtitle',$card->subtitle) }}</textarea></div>
-<div class="field"><label>Naslov (bosanski)</label><input name="title_bs" value="{{ old('title_bs',$card->title_bs) }}"></div>
-<div class="field"><label>Opis (bosanski)</label><textarea name="subtitle_bs" rows="5">{{ old('subtitle_bs',$card->subtitle_bs) }}</textarea></div>
+<div class="field"><label>Title / situation</label><input id="cardTitleEn" name="title" required value="{{ old('title',$card->title) }}"></div>
+<div class="field"><label>Description</label><textarea id="cardSubtitleEn" name="subtitle" rows="5">{{ old('subtitle',$card->subtitle) }}</textarea></div>
+<div class="field"><label>Naslov (bosanski)</label><input id="cardTitleBs" name="title_bs" value="{{ old('title_bs',$card->title_bs) }}"></div>
+<div class="field"><label>Opis (bosanski)</label><textarea id="cardSubtitleBs" name="subtitle_bs" rows="5">{{ old('subtitle_bs',$card->subtitle_bs) }}</textarea></div>
+@if($card->exists)<div class="field" style="background:#101922;border:1px solid #24445c;border-radius:10px;padding:13px"><button id="translateToBosnian" class="secondary" type="button" style="width:100%">AI PREVOD NA BOSANSKI</button><p class="hint" style="margin:9px 0 0"><strong style="color:#facc15">Isključivo bosanski jezik</strong> — ne hrvatski ili srpski. AI dobija posebnu uputu da provjeri gramatiku, ijekavicu i afrikate č, ć, dž i đ. Prevod popunjava polja iznad; pregledajte ga i kliknite “Save card”.</p><p id="translationStatus" class="hint" style="margin:7px 0 0"></p></div>@endif
 <input type="hidden" name="status" value="0"><label style="align-items:center;display:flex;gap:10px;margin-bottom:18px"><input type="checkbox" name="status" value="1" style="width:auto" @checked((bool) old('status',$card->exists ? $card->status : true))> Approved and available in games</label>
 <div class="form-grid"><div class="field"><label>Misery score</label><input name="score" type="number" min="0" max="100" step="0.01" required value="{{ old('score',$card->score ?? 0) }}"></div>
 <div class="field"><label>Stack</label><select name="stack_id" required>@foreach($stacks as $stack)<option value="{{ $stack->id }}" @selected(old('stack_id',$card->stack_id)==$stack->id)>{{ $stack->name }}</option>@endforeach</select></div></div>
@@ -43,6 +44,7 @@ body.cropper-open{overflow:hidden}.generated-cropper{align-items:stretch;backgro
 const upload=document.getElementById('imageUpload'),path=document.getElementById('imagePath'),preview=document.getElementById('preview'),fallback=document.getElementById('fallback');
 const generationForm=document.getElementById('artwork-generation-form');
 const svgGenerationForm=document.getElementById('svg-generation-form');
+const translationButton=document.getElementById('translateToBosnian'),translationStatus=document.getElementById('translationStatus');
 function show(src){if(!src)return;preview.src=src;preview.style.display='block';if(fallback)fallback.style.display='none'}
 upload?.addEventListener('change',()=>{const file=upload.files?.[0];if(file)show(URL.createObjectURL(file))});
 path?.addEventListener('input',()=>{if(/^https?:\/\//.test(path.value))show(path.value)});
@@ -68,6 +70,19 @@ svgGenerationForm?.addEventListener('submit',()=>{
     button.disabled=true;
     button.textContent='Generating SVG…';
 });
+@if($card->exists)
+translationButton?.addEventListener('click',async()=>{
+    const title=document.getElementById('cardTitleEn').value.trim(),subtitle=document.getElementById('cardSubtitleEn').value.trim();
+    if(!title){alert('Enter the English title first.');return}
+    translationButton.disabled=true;translationButton.textContent='PREVODIM NA BOSANSKI…';translationStatus.textContent='AI provjerava bosanski standard, gramatiku i afrikate…';
+    try{
+        const response=await fetch({{ Illuminate\Support\Js::from(route('cms.cards.translate-bs',$card)) }},{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify({title,subtitle})});
+        const payload=await response.json();if(!response.ok)throw new Error(payload.message||'AI translation failed.');
+        document.getElementById('cardTitleBs').value=payload.title_bs||'';document.getElementById('cardSubtitleBs').value=payload.subtitle_bs||'';
+        translationStatus.textContent=`Bosanski prevod je popunjen (${payload.provider}). Pregledajte i sačuvajte karticu.`;
+    }catch(error){translationStatus.textContent='Prevod nije uspio.';alert(error.message||'AI translation failed.')}finally{translationButton.disabled=false;translationButton.textContent='AI PREVOD NA BOSANSKI'}
+});
+@endif
 @if($canCropArtwork || $showCropper)
 (()=>{
     const modal=document.getElementById('generatedCropper'),frame=document.getElementById('cropFrame'),canvas=document.getElementById('cropCanvas');

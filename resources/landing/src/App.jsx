@@ -308,9 +308,9 @@ export default function App() {
     image: card.image,
     score: Number(card.score),
     sub: card.subtitle || '',
-    subBs: card.subtitle_bs || card.subtitle || '',
+    subBs: card.subtitle_bs?.trim() || card.subtitle || '',
     title: card.title,
-    titleBs: card.title_bs || card.title,
+    titleBs: card.title_bs?.trim() || card.title,
   })).filter(card => card.image && Number.isFinite(card.score)), [apiCards]);
   const scenarioPool = realCards.length ? realCards : scenarios;
   const rawScenario = scenarioPool[scenarioIndex % scenarioPool.length];
