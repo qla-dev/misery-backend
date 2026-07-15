@@ -176,7 +176,7 @@ class GameController extends Controller
     public function index()
     {
         return GameResource::collection(
-            Game::where('started', false)->whereNull('terminated_at')->with('members')->has('members', '<', config('game.max_players'))->latest()->get()
+            Game::where('started', false)->where('is_private', false)->whereNull('terminated_at')->with('members')->has('members', '<', config('game.max_players'))->latest()->get()
         );
     }
 
@@ -222,6 +222,23 @@ class GameController extends Controller
         $game->update(['host_in_lobby' => $data['present']]);
 
         return $this->full($game);
+    }
+
+    public function lockRoom(Request $request, Game $game)
+    {
+        $data = $request->validate(['user_id' => ['required', 'integer']]);
+        $proUser = $request->user();
+        $hasActivePro = in_array($proUser?->pro_status, ['monthly', 'yearly'], true)
+            && (! $proUser->pro_ends_at || $proUser->pro_ends_at->isFuture());
+
+        abort_unless($hasActivePro, 403, 'An active Misery PRO subscription is required to create a private room.');
+        abort_unless((int) $game->owner_id === (int) $data['user_id'], 403, 'Only the room owner can lock this room.');
+        abort_if($game->started, 422, 'A room can only be locked before the game starts.');
+        $this->ensurePlayable($game);
+
+        $game->update(['is_private' => true]);
+
+        return $this->full($game->refresh());
     }
 
     public function kickPlayer(Request $request, Game $game)

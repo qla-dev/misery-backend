@@ -7,6 +7,7 @@ use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class GamePresenceTest extends TestCase
@@ -132,6 +133,40 @@ class GamePresenceTest extends TestCase
         $this->postJson("/api/games/{$game->id}/kick", ['user_id' => $host->id, 'player_id' => $guest->id])
             ->assertUnprocessable();
         $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
+    }
+
+    public function test_active_pro_can_lock_their_lobby_and_hide_it_from_public_games(): void
+    {
+        $proUser = User::factory()->create([
+            'pro_status' => 'yearly',
+            'pro_ends_at' => now()->addYear(),
+        ]);
+        $host = User::factory()->create(['color' => 'yellow']);
+        $game = Game::create(['code' => 'LOCK1234', 'owner_id' => $host->id, 'started' => false]);
+        $game->members()->attach($host->id);
+        Sanctum::actingAs($proUser);
+
+        $this->postJson("/api/games/{$game->id}/lock", ['user_id' => $host->id])
+            ->assertOk()
+            ->assertJsonPath('data.is_private', true);
+
+        $this->getJson('/api/games')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $game->id]);
+    }
+
+    public function test_non_pro_cannot_lock_a_lobby(): void
+    {
+        $freeUser = User::factory()->create(['pro_status' => 'inactive']);
+        $host = User::factory()->create(['color' => 'yellow']);
+        $game = Game::create(['code' => 'OPEN1234', 'owner_id' => $host->id, 'started' => false]);
+        $game->members()->attach($host->id);
+        Sanctum::actingAs($freeUser);
+
+        $this->postJson("/api/games/{$game->id}/lock", ['user_id' => $host->id])
+            ->assertForbidden();
+
+        $this->assertFalse($game->refresh()->is_private);
     }
 
     public function test_guest_cannot_remove_another_lobby_player(): void
