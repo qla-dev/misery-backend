@@ -20,6 +20,10 @@ class StorefrontTest extends TestCase
         $this->assertStringContainsString('Cookie Policy | Misery Meter', file_get_contents(public_path('dist/cookies/index.html')));
         $this->assertStringContainsString('Privacy Policy | Misery Meter', file_get_contents(public_path('dist/privacy/index.html')));
         $this->assertStringContainsString('Terms of Use | Misery Meter', file_get_contents(public_path('dist/terms/index.html')));
+        $this->assertStringContainsString('https://miserymeter.app/', file_get_contents(public_path('dist/index.html')));
+        $this->assertStringContainsString('https://miserymeter.app/cookies', file_get_contents(public_path('dist/cookies/index.html')));
+        $this->assertStringContainsString('https://miserymeter.app/privacy', file_get_contents(public_path('dist/privacy/index.html')));
+        $this->assertStringContainsString('https://miserymeter.app/terms', file_get_contents(public_path('dist/terms/index.html')));
     }
 
     public function test_landing_social_image_is_a_large_png(): void

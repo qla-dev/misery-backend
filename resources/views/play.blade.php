@@ -30,7 +30,7 @@ async function killAvailableRoom(id){if(!confirm('Kill and permanently delete th
 function escapeHtml(value){return String(value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))}
 function playerColor(value){return ({yellow:'#facc15',blue:'#60a5fa',emerald:'#10b981',purple:'#c084fc',rose:'#ef4444',red:'#ef4444',orange:'#f97316',brown:'#8b5a2b',silver:'#d4d4d4'})[value]||'#facc15'}
 function set(x){game=x.game.data||x.game;user=x.user.data||x.user;q('entry').className='hidden';q('room').className='';render();if(refreshTimer)clearInterval(refreshTimer);refreshTimer=setInterval(refresh,3000)}
-async function refresh(){if(game){game=await call('/games/'+game.id);render()}}
+async function refresh(){if(game&&user){game=await call('/games/'+game.id+'?user_id='+encodeURIComponent(user.id));render()}}
 function render(){
  q('roomCode').textContent=game.code;
  q('players').innerHTML=game.members.map(x=>'<p>'+escapeHtml(x.name)+'</p>').join('');

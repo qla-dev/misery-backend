@@ -33,7 +33,8 @@ class GamePresenceTest extends TestCase
 
         $this->getJson("/api/games/{$game->id}?user_id={$host->id}")
             ->assertOk()
-            ->assertJsonMissing(['id' => $inactive->id]);
+            ->assertJsonCount(1, 'data.members')
+            ->assertJsonPath('data.members.0.id', $host->id);
 
         $game->refresh();
         $this->assertNull($game->terminated_at);
@@ -73,5 +74,42 @@ class GamePresenceTest extends TestCase
             ->assertJsonCount(0, 'data.members');
 
         $this->assertDatabaseCount('members', 0);
+    }
+
+    public function test_turn_timeout_immediately_removes_an_inactive_guest(): void
+    {
+        $host = User::factory()->create(['color' => 'yellow']);
+        $guest = User::factory()->create(['color' => 'blue']);
+        $game = Game::create([
+            'code' => 'IDLE1234',
+            'owner_id' => $host->id,
+            'started' => true,
+            'current_player_id' => $guest->id,
+            'turn_owner_id' => $guest->id,
+        ]);
+        $game->members()->attach([$host->id, $guest->id]);
+
+        $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $guest->id])
+            ->assertOk()
+            ->assertJsonCount(1, 'data.members')
+            ->assertJsonPath('data.members.0.id', $host->id);
+
+        $this->assertDatabaseMissing('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
+        $this->assertSame($host->id, $game->refresh()->current_player_id);
+    }
+
+    public function test_turn_timeout_terminates_the_game_for_an_inactive_host(): void
+    {
+        $host = User::factory()->create(['color' => 'yellow']);
+        $guest = User::factory()->create(['color' => 'blue']);
+        $game = Game::create(['code' => 'IDLEHOST', 'owner_id' => $host->id, 'started' => true]);
+        $game->members()->attach([$host->id, $guest->id]);
+
+        $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $host->id])
+            ->assertOk()
+            ->assertJsonPath('data.termination_reason', 'host_inactive')
+            ->assertJsonCount(0, 'data.members');
+
+        $this->assertNotNull($game->refresh()->terminated_at);
     }
 }

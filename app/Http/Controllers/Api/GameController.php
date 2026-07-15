@@ -413,6 +413,30 @@ class GameController extends Controller
         });
     }
 
+    public function inactivityTimeout(Request $request, Game $game)
+    {
+        $data = $request->validate(['user_id' => 'required|integer']);
+        $userId = (int) $data['user_id'];
+
+        return DB::transaction(function () use ($game, $userId) {
+            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            if ($game->terminated_at) return $this->full($game);
+
+            $originalMemberIds = $this->memberIds($game);
+            abort_unless(in_array($userId, $originalMemberIds, true), 404, 'Player is not in this room.');
+
+            if ($userId === (int) $game->owner_id) {
+                $this->terminateGame($game, 'host_inactive');
+            } else {
+                DB::table('members')->where('game_id', $game->id)->where('user_id', $userId)->delete();
+                $this->normalizeAfterMembersRemoved($game, $originalMemberIds, [$userId]);
+                Log::info('Inactive game member removed after turn timeout', ['game_id' => $game->id, 'user_id' => $userId]);
+            }
+
+            return $this->full($game->refresh());
+        });
+    }
+
     public function leave(Request $request, Game $game)
     {
         $data = $request->validate(['user_id' => 'required|integer']);

@@ -29,5 +29,6 @@ Route::post('games/{game}/start', [GameController::class, 'start']);
 Route::post('games/{game}/moves', [GameController::class, 'move']);
 Route::post('games/{game}/finish-turn', [GameController::class, 'finishTurn']);
 Route::post('games/{game}/pass-steal', [GameController::class, 'passSteal']);
+Route::post('games/{game}/inactivity-timeout', [GameController::class, 'inactivityTimeout']);
 Route::post('games/{game}/leave', [GameController::class, 'leave']);
 Route::options('{path}', fn () => response()->noContent())->where('path', '.*');
