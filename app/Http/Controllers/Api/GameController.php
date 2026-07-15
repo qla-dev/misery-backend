@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\GameResource;
+use App\Http\Resources\GameMessageResource;
 use App\Http\Resources\MoveResource;
 use App\Http\Resources\UserResource;
 use App\Models\Card;
 use App\Models\Game;
+use App\Models\GameMessage;
 use App\Models\Move;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -20,7 +22,12 @@ class GameController extends Controller
 
     private function full(Game $game): GameResource
     {
-        return new GameResource($game->load(['members', 'currentCard', 'moves' => fn ($q) => $q->with(['player', 'card'])->latest()]));
+        return new GameResource($game->load([
+            'members',
+            'currentCard',
+            'moves' => fn ($q) => $q->with(['player', 'card'])->latest(),
+            'messages' => fn ($q) => $q->with('user')->latest()->limit(100),
+        ]));
     }
 
     private function memberIds(Game $game): array
@@ -208,6 +215,31 @@ class GameController extends Controller
         $data = $request->validate(['user_id' => 'nullable|integer']);
         if (isset($data['user_id'])) $game = $this->refreshPresence($game, (int) $data['user_id']);
         return $this->full($game);
+    }
+
+    public function sendMessage(Request $request, Game $game)
+    {
+        $request->merge(['message' => trim((string) $request->input('message'))]);
+        $data = $request->validate([
+            'user_id' => ['required', 'integer'],
+            'message' => ['required', 'string', 'max:20'],
+        ]);
+
+        $this->ensurePlayable($game);
+        abort_unless($game->started, 422, 'Game has not started.');
+        abort_unless(
+            DB::table('members')->where('game_id', $game->id)->where('user_id', $data['user_id'])->exists(),
+            403,
+            'Only players in this room can send messages.'
+        );
+
+        $message = GameMessage::create([
+            'game_id' => $game->id,
+            'user_id' => $data['user_id'],
+            'message' => $data['message'],
+        ]);
+
+        return (new GameMessageResource($message->load('user')))->response()->setStatusCode(201);
     }
 
     public function byCode(string $code)

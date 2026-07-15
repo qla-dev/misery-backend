@@ -55,4 +55,9 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Game::class, 'members')->withTimestamps();
     }
+
+    public function gameMessages()
+    {
+        return $this->hasMany(GameMessage::class);
+    }
 }
