@@ -12,7 +12,6 @@ use App\Models\Move;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class GameController extends Controller
@@ -139,37 +138,6 @@ class GameController extends Controller
         abort_if($game->terminated_at, 410, 'This game was ended by the host.');
     }
 
-    private function hasActiveRevenueCatPro(string $appUserId): bool
-    {
-        $secretApiKey = config('services.revenuecat.secret_api_key');
-        if (! $secretApiKey) return false;
-
-        $response = Http::withToken($secretApiKey)
-            ->acceptJson()
-            ->timeout(8)
-            ->get('https://api.revenuecat.com/v1/subscribers/'.rawurlencode($appUserId));
-        if (! $response->successful()) return false;
-
-        $entitlements = $response->json('subscriber.entitlements') ?: [];
-        $preferredId = config('services.revenuecat.pro_entitlement_id', 'misery-pro');
-        $candidates = isset($entitlements[$preferredId])
-            ? [$entitlements[$preferredId]]
-            : array_values($entitlements);
-
-        foreach ($candidates as $entitlement) {
-            if (! is_array($entitlement)) continue;
-            $productId = strtolower((string) ($entitlement['product_identifier'] ?? ''));
-            $isProProduct = in_array($productId, ['misery_monthly', 'misery_yearly'], true)
-                || str_contains($productId, 'month')
-                || str_contains($productId, 'year')
-                || str_contains($productId, 'annual');
-            $expiresAt = $entitlement['expires_date'] ?? null;
-            if ($isProProduct && (! $expiresAt || now()->lt($expiresAt))) return true;
-        }
-
-        return false;
-    }
-
     private function drawNextCard(Game $game): void
     {
         $used = DB::table('game_cards')->where('game_id', $game->id)->pluck('card_id');
@@ -260,15 +228,10 @@ class GameController extends Controller
     {
         $data = $request->validate([
             'user_id' => ['required', 'integer'],
-            'revenuecat_app_user_id' => ['nullable', 'string', 'max:255'],
+            'pro_active' => ['required', 'boolean'],
         ]);
-        $proUser = $request->user();
-        $hasBackendPro = in_array($proUser?->pro_status, ['monthly', 'yearly'], true)
-            && (! $proUser->pro_ends_at || $proUser->pro_ends_at->isFuture());
-        $hasRevenueCatPro = isset($data['revenuecat_app_user_id'])
-            && $this->hasActiveRevenueCatPro($data['revenuecat_app_user_id']);
 
-        abort_unless($hasBackendPro || $hasRevenueCatPro, 403, 'An active Misery PRO subscription is required to create a private room.');
+        abort_unless($data['pro_active'], 403, 'An active Misery PRO subscription is required to create a private room.');
         abort_unless((int) $game->owner_id === (int) $data['user_id'], 403, 'Only the room owner can lock this room.');
         abort_if($game->started, 422, 'A room can only be locked before the game starts.');
         $this->ensurePlayable($game);

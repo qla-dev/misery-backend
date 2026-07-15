@@ -7,8 +7,6 @@ use App\Models\Game;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
-use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class GamePresenceTest extends TestCase
@@ -136,18 +134,13 @@ class GamePresenceTest extends TestCase
         $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
     }
 
-    public function test_active_pro_can_lock_their_lobby_and_hide_it_from_public_games(): void
+    public function test_guest_with_active_native_pro_can_lock_their_lobby_and_hide_it_from_public_games(): void
     {
-        $proUser = User::factory()->create([
-            'pro_status' => 'yearly',
-            'pro_ends_at' => now()->addYear(),
-        ]);
         $host = User::factory()->create(['color' => 'yellow']);
         $game = Game::create(['code' => 'LOCK1234', 'owner_id' => $host->id, 'started' => false]);
         $game->members()->attach($host->id);
-        Sanctum::actingAs($proUser);
 
-        $this->postJson("/api/games/{$game->id}/lock", ['user_id' => $host->id])
+        $this->postJson("/api/games/{$game->id}/lock", ['user_id' => $host->id, 'pro_active' => true])
             ->assertOk()
             ->assertJsonPath('data.is_private', true);
 
@@ -158,46 +151,14 @@ class GamePresenceTest extends TestCase
 
     public function test_non_pro_cannot_lock_a_lobby(): void
     {
-        $freeUser = User::factory()->create(['pro_status' => 'inactive']);
         $host = User::factory()->create(['color' => 'yellow']);
         $game = Game::create(['code' => 'OPEN1234', 'owner_id' => $host->id, 'started' => false]);
         $game->members()->attach($host->id);
-        Sanctum::actingAs($freeUser);
 
-        $this->postJson("/api/games/{$game->id}/lock", ['user_id' => $host->id])
+        $this->postJson("/api/games/{$game->id}/lock", ['user_id' => $host->id, 'pro_active' => false])
             ->assertForbidden();
 
         $this->assertFalse($game->refresh()->is_private);
-    }
-
-    public function test_anonymous_revenuecat_pro_customer_can_lock_their_lobby(): void
-    {
-        config([
-            'services.revenuecat.secret_api_key' => 'rc_secret_test',
-            'services.revenuecat.pro_entitlement_id' => 'misery-pro',
-        ]);
-        Http::fake([
-            'https://api.revenuecat.com/v1/subscribers/*' => Http::response([
-                'subscriber' => ['entitlements' => [
-                    'misery-pro' => [
-                        'product_identifier' => 'misery_yearly',
-                        'expires_date' => now()->addYear()->toIso8601String(),
-                    ],
-                ]],
-            ]),
-        ]);
-        $host = User::factory()->create(['color' => 'yellow']);
-        $game = Game::create(['code' => 'ANON1234', 'owner_id' => $host->id, 'started' => false]);
-        $game->members()->attach($host->id);
-
-        $this->postJson("/api/games/{$game->id}/lock", [
-            'user_id' => $host->id,
-            'revenuecat_app_user_id' => '$RCAnonymousID:test-customer',
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.is_private', true);
-
-        Http::assertSent(fn ($request) => str_contains($request->url(), rawurlencode('$RCAnonymousID:test-customer')));
     }
 
     public function test_guest_cannot_remove_another_lobby_player(): void
