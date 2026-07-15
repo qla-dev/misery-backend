@@ -157,6 +157,7 @@ function GameCard({ card, hidden = false, className = '', logoArtwork = false, s
         }
       </div>
     </div>
+    <div className="main-card-score-bg"/>
     <div className="main-card-score">
       <span>{scoreLabel}</span>
       <div><b>{hidden ? '?.??' : Number(card.score).toFixed(2)}</b></div>
