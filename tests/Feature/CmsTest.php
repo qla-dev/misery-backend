@@ -24,7 +24,14 @@ class CmsTest extends TestCase
         $card = Card::create(['title' => 'Bad day', 'subtitle' => 'Very bad', 'score' => 10, 'deck' => 'normal', 'stack_id' => $stack->id]);
         $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
 
-        $this->withServerVariables($server)->get('/cms/cards')->assertOk()->assertSee('Bad day');
+        $this->withServerVariables($server)->get('/cms/cards')
+            ->assertOk()
+            ->assertSee('Bad day')
+            ->assertSee('Export HQ PNG')
+            ->assertSee('CARD_EXPORT_WIDTH=1200', false);
+        $this->withServerVariables($server)->get('/cms/native-card-artwork')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/png');
         $this->withServerVariables($server)->put('/cms/cards/'.$card->id, [
             'title' => 'Worse day', 'subtitle' => 'Much worse', 'score' => 20.5,
             'stack_id' => $stack->id, 'image' => '',

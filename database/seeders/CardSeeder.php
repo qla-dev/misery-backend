@@ -17,6 +17,7 @@ class CardSeeder extends Seeder
     {
         $normal = Stack::firstOrCreate(['slug' => 'normal'], ['name' => 'Normal']);
         Stack::firstOrCreate(['slug' => 'spicy'], ['name' => 'Spicy']);
+        $adult = Stack::firstOrCreate(['slug' => '18-plus'], ['name' => '18+']);
 
         $events = [
             // Travel disasters
@@ -138,6 +139,14 @@ class CardSeeder extends Seeder
             ['A Sinkhole Swallows Your Driveway and Car', 'The ground opens overnight and leaves the vehicle at the bottom.', 94.7],
             ['Live Television Reveals Your Biggest Secret', 'The host reads the wrong card and millions hear what was meant to stay private.', 78.4],
             ['A Meteorite Punches Through Your Roof', 'The impossible rock misses you, destroys the house, and starts smoking.', 96.1],
+        ];
+
+        $adultEvents = [
+            ['Your Parents Walk In at the Worst Possible Moment', 'The door opens before either of you can reach the sheets.', 'Roditelji upadaju u najgorem mogućem trenutku', 'Vrata se otvaraju prije nego što iko od vas uspije dohvatiti pokrivač.', 62.18],
+            ['Send a Nude to the Family Group Chat', 'Read receipts appear before you can find the delete button.', 'Pošalješ golu fotografiju u porodičnu grupu', 'Potvrde o čitanju pojavljuju se prije nego što pronađeš dugme za brisanje.', 78.45],
+            ['The Condom Breaks During a One-Night Stand', 'The mood disappears instantly and neither of you knows what comes next.', 'Kondom pukne tokom avanture za jednu noć', 'Raspoloženje nestaje istog trenutka, a niko od vas ne zna šta slijedi.', 84.72],
+            ['Say Your Ex’s Name During Sex', 'The room goes silent while both of you process exactly what you said.', 'Tokom seksa izgovoriš ime bivše osobe', 'U sobi nastaje tišina dok oboje shvatate šta si upravo rekao ili rekla.', 55.36],
+            ['Your Intimate Video Plays on the Office Screen', 'The presentation connects to the wrong file while the entire team watches.', 'Intimni video počne se reproducirati na uredskom ekranu', 'Prezentacija otvara pogrešan fajl dok cijeli tim gleda u ekran.', 91.64],
         ];
 
         // Explicitly ranked after comparing the consequence described on every card.
@@ -278,7 +287,7 @@ class CardSeeder extends Seeder
             return;
         }
 
-        DB::transaction(function () use ($events, $normal) {
+        DB::transaction(function () use ($adult, $adultEvents, $events, $normal) {
             DB::table('moves')->delete();
             DB::table('game_cards')->delete();
             DB::table('members')->delete();
@@ -297,6 +306,20 @@ class CardSeeder extends Seeder
                 'created_at' => $now,
                 'updated_at' => $now,
             ], $events));
+            Card::query()->insert(array_map(fn (array $event) => [
+                'title' => $event[0],
+                'subtitle' => $event[1],
+                'title_bs' => $event[2],
+                'subtitle_bs' => $event[3],
+                'score' => $event[4],
+                'image' => '0',
+                'svg_img' => null,
+                'deck' => '18-plus',
+                'stack_id' => $adult->id,
+                'status' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], $adultEvents));
         });
 
         Storage::disk('public')->deleteDirectory('cards/generated');

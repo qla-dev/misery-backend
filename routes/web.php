@@ -89,6 +89,12 @@ Route::get('/card-images/{path}', function (string $path) {
 })->where('path', '.+')->name('card-images.show');
 Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::view('/', 'cms.home')->name('home');
+    Route::get('native-card-artwork', function () {
+        return response()->file(base_path('../frontend/assets/images/def-card.png'), [
+            'Cache-Control' => 'public, max-age=86400',
+            'Content-Type' => 'image/png',
+        ]);
+    })->name('native-card-artwork');
     Route::resource('cards', CmsCardController::class)->except('show');
     Route::post('cards/{card}/generate', [CmsCardController::class, 'generate'])->name('cards.generate');
     Route::post('cards/{card}/translate-bs', [CmsCardController::class, 'translateToBosnian'])->name('cards.translate-bs');
