@@ -16,7 +16,7 @@ const copy = {
     nav: ['Igra', 'Misery Lane', 'Karte', 'Preuzmi'], buy: 'Preuzmi', eyebrow: 'PARTY IGRA · 2–8 IGRAČA',
     heroA: 'KOLIKO LOŠE', heroB: 'JE LOŠE?', hero: 'Složi životne katastrofe na svoju Traku Bijede. Pogriješi, i neko će ti ukrasti kartu ispred nosa.',
     play: 'Isprobaj igru', box: 'Preuzmi aplikaciju', scroll: 'Skrolaj prema nesreći',
-    labTag: 'TESTIRAJ INSTINKT', labTitle: 'Gdje ova nesreća pripada?', labText: 'Pomjeri kartu na mjesto koje osjećaš. Onda otkrij stvarni Misery Rate.',
+    labTag: 'TESTIRAJ INSTINKT', labTitle: 'Gdje ova nesreća pripada?', labText: 'Pomjeri kartu na mjesto koje osjećaš. Onda otkrij stvarnu Stopu patnje.',
     reveal: 'Otkrij ocjenu', again: 'Nova katastrofa', yourGuess: 'Tvoja procjena', actual: 'Stvarna ocjena',
     stepsTag: 'UPOZNAJ MISERY LANE', stepsTitle: 'Četiri koraka kroz Misery Lane. Ili do izdaje.',
     cardsTag: '100+ RAZLOGA ZA SVAĐU', cardsTitle: 'Svaka karta krije broj. Tvoja ekipa krije loše procjene.',
@@ -143,7 +143,7 @@ function LegacyGameCard({ card, hidden = false, className = '', animatedArtwork 
   </article>;
 }
 
-function GameCard({ card, hidden = false, className = '', logoArtwork = false }) {
+function GameCard({ card, hidden = false, className = '', logoArtwork = false, scoreLabel = 'MISERY RATE' }) {
   return <article className={`game-card main-game-card ${className}`}>
     <div className="main-card-content">
       <p>{card.title}</p>
@@ -158,7 +158,7 @@ function GameCard({ card, hidden = false, className = '', logoArtwork = false })
       </div>
     </div>
     <div className="main-card-score">
-      <span>MISERY RATE</span>
+      <span>{scoreLabel}</span>
       <div><b>{hidden ? '?.??' : Number(card.score).toFixed(2)}</b></div>
     </div>
   </article>;
@@ -179,7 +179,7 @@ function RuleBand({ number, children }) {
 }
 
 function RuleLane({ cards, hidden = false, lang }) {
-  return <div className="rulebook-lane-cards">{cards.map((rawCard, index)=>{const card={...rawCard,title:lang==='bs'&&rawCard.titleBs?rawCard.titleBs:rawCard.title,sub:lang==='bs'&&rawCard.subBs?rawCard.subBs:rawCard.sub};return <div className={hidden&&index===1?'mystery':''} key={card.id||`${card.title}-${index}`}><GameCard card={card} className="rulebook-lane-card" hidden={hidden&&index===1}/>{index<cards.length-1&&<i>›</i>}</div>})}</div>;
+  return <div className="rulebook-lane-cards">{cards.map((rawCard, index)=>{const card={...rawCard,title:lang==='bs'&&rawCard.titleBs?rawCard.titleBs:rawCard.title,sub:lang==='bs'&&rawCard.subBs?rawCard.subBs:rawCard.sub};return <div className={hidden&&index===1?'mystery':''} key={card.id||`${card.title}-${index}`}><GameCard card={card} className="rulebook-lane-card" hidden={hidden&&index===1} scoreLabel={lang==='bs'?'STOPA PATNJE':'MISERY RATE'}/>{index<cards.length-1&&<i>›</i>}</div>})}</div>;
 }
 
 function WebRulebook({ cards, lang }) {
@@ -195,26 +195,26 @@ function WebRulebook({ cards, lang }) {
       <article className="rulebook-block rulebook-wide">
         <RuleBand number="2">{bs?'ŠTA JE U IGRI?':"WHAT'S IN THE GAME?"}</RuleBand>
         <p><b>100+ {bs?'KARTICA NESRETNIH DOGAĐAJA':'MISERABLE EVENT CARDS'}</b>{bs?'; svaka prikazuje događaj koji se dogodio ili bi se vrlo lako mogao dogoditi.':'; each one shows something that happened or very easily could happen.'}</p>
-        <div className="rulebook-callout"><div className="rulebook-generated-art"><img alt="" src={rulebookSpectrumIllustration}/></div><p>{bs?'Kao što ćeš vidjeti, neki događaji su prilično sitni ':"As you'll see, some events are pretty minor "}<em>{bs?'(poput propuštenog autobusa)':'(like missing the bus)'}</em>{bs?', dok su drugi mnogo gori ':', while others are far more miserable '}<em>{bs?'(poput udara munje)':'(like being struck by lightning)'}</em>{bs?'. Svaka kartica ima svoje mjesto na ':'. Every card has a fixed place on the '}<b>Misery Rate</b>{bs?' skali.':'.'}</p></div>
+        <div className="rulebook-callout"><div className="rulebook-generated-art"><img alt="" src={rulebookSpectrumIllustration}/></div><p>{bs?'Kao što ćeš vidjeti, neki događaji su prilično sitni ':"As you'll see, some events are pretty minor "}<em>{bs?'(poput propuštenog autobusa)':'(like missing the bus)'}</em>{bs?', dok su drugi mnogo gori ':', while others are far more miserable '}<em>{bs?'(poput udara munje)':'(like being struck by lightning)'}</em>{bs?'. Svaka kartica ima svoje mjesto na ':'. Every card has a fixed place on the '}<b>{bs?'Stopa patnje':'Misery Rate'}</b>{bs?' skali.':'.'}</p></div>
       </article>
 
       <article className="rulebook-block rulebook-wide">
-        <RuleBand number="3">THE MISERY RATE</RuleBand>
-        <p><b>Misery Rate</b>{bs?' je sistem rangiranja koji ide od ':' is the game’s ranking system that runs from '}<b>{bs?'0 do 100':'0 to 100'}</b>{bs?'. Niska ocjena znači neugodnu sitnicu, a visoka ocjena znači bijedu koja mijenja život.':'. A low score means an annoying inconvenience; a high score means life-changing misery.'}</p>
-        <div className="rulebook-scale"><h4>{bs?'MISERY RATE OBJAŠNJEN':'THE MISERY RATE DEMYSTIFIED'}</h4><div className="rulebook-scale-track">{[0,20,40,60,80,100].map(x=><span key={x}>{x}</span>)}</div><div className="rulebook-pointers">{cards.map(card=><div className="rulebook-pointer" key={card.id||card.title}><b>{bs&&card.titleBs?card.titleBs:card.title}</b></div>)}</div><small><b>{bs?'JEDVA LOŠE':'BARELY BAD'}</b><b>{bs?'POTPUNA BIJEDA':'ABSOLUTE MISERY'}</b></small></div>
+        <RuleBand number="3">{bs?'STOPA PATNJE':'THE MISERY RATE'}</RuleBand>
+        <p><b>{bs?'Stopa patnje':'Misery Rate'}</b>{bs?' je sistem rangiranja koji ide od ':' is the game’s ranking system that runs from '}<b>{bs?'0 do 100':'0 to 100'}</b>{bs?'. Niska ocjena znači neugodnu sitnicu, a visoka ocjena znači bijedu koja mijenja život.':'. A low score means an annoying inconvenience; a high score means life-changing misery.'}</p>
+        <div className="rulebook-scale"><h4>{bs?'STOPA PATNJE OBJAŠNJENA':'THE MISERY RATE DEMYSTIFIED'}</h4><div className="rulebook-scale-track">{[0,20,40,60,80,100].map(x=><span key={x}>{x}</span>)}</div><div className="rulebook-pointers">{cards.map(card=><div className="rulebook-pointer" key={card.id||card.title}><b>{bs&&card.titleBs?card.titleBs:card.title}</b></div>)}</div><small><b>{bs?'JEDVA LOŠE':'BARELY BAD'}</b><b>{bs?'POTPUNA BIJEDA':'ABSOLUTE MISERY'}</b></small></div>
         <p>{bs?'Ne moraš pogoditi ':'You never need the '}<b>{bs?'TAČAN BROJ':'EXACT NUMBER'}</b>{bs?'. Trebaš samo odlučiti gdje ':'. You only need to decide where the '}<b>{bs?'SKRIVENA OCJENA':'HIDDEN SCORE'}</b>{bs?' pripada među karticama koje su već u tvojoj stazi.':' belongs among the cards already in your lane.'}</p>
       </article>
 
       <article className="rulebook-block rulebook-anatomy">
         <RuleBand number="4">{bs?'ANATOMIJA KARTICE':'CARD ANATOMY'}</RuleBand>
         <p>{bs?'Kartice u Misery Meteru nisu komplikovane.':'Misery Meter cards aren’t complicated.'}</p>
-        <div className="anatomy-demo"><div className="anatomy-labels"><b>{bs?'NESRETNI DOGAĐAJ':'MISERABLE EVENT'}</b><b>{bs?'ILUSTRACIJA':'ILLUSTRATION'}</b><b>MISERY RATE</b></div><GameCard card={{...cards[2],title:bs&&cards[2].titleBs?cards[2].titleBs:cards[2].title,sub:bs&&cards[2].subBs?cards[2].subBs:cards[2].sub}} className="rulebook-anatomy-card"/></div>
+        <div className="anatomy-demo"><div className="anatomy-labels"><b>{bs?'NESRETNI DOGAĐAJ':'MISERABLE EVENT'}</b><b>{bs?'ILUSTRACIJA':'ILLUSTRATION'}</b><b>{bs?'STOPA PATNJE':'MISERY RATE'}</b></div><GameCard card={{...cards[2],title:bs&&cards[2].titleBs?cards[2].titleBs:cards[2].title,sub:bs&&cards[2].subBs?cards[2].subBs:cards[2].sub}} className="rulebook-anatomy-card" scoreLabel={bs?'STOPA PATNJE':'MISERY RATE'}/></div>
       </article>
 
       <article className="rulebook-block">
         <RuleBand number="5">{bs?'NEKA BIJEDA POČNE':"LET'S GET MISERABLE"}</RuleBand>
-        <p>{bs?'Svaki igrač počinje s tri kartice koje su već poredane od najniže do najviše Misery Rate ocjene. One čine početak tvog Misery Lanea.':'Each player starts with three cards already arranged from the lowest to the highest Misery Rate. Those cards form the beginning of your Misery Lane.'}</p>
-        <div className="rulebook-lane"><strong>MISERY LANE</strong><RuleLane cards={cards} hidden lang={lang}/><p>{bs?'Nova kartica prvo ulazi u stazu sa znakom ?. Izaberi mjesto između poznatih ocjena gdje misliš da pripada. Ne pogađaš broj, nego njen pravilan položaj.':'The new card first enters the lane with a ?. Choose the place between the known scores where you think it belongs. You are not guessing the number, only its correct position.'}</p><RuleLane cards={cards} lang={lang}/><p>{bs?'Game Master zatim otkriva stvarnu Misery Rate ocjenu i pokazuje da li je položaj tačan.':'The Game Master then reveals the real Misery Rate and shows whether the position is correct.'}</p></div>
+        <p>{bs?'Svaki igrač počinje s tri kartice koje su već poredane od najniže do najviše ocjene Stope patnje. One čine početak tvog Misery Lanea.':'Each player starts with three cards already arranged from the lowest to the highest Misery Rate. Those cards form the beginning of your Misery Lane.'}</p>
+        <div className="rulebook-lane"><strong>MISERY LANE</strong><RuleLane cards={cards} hidden lang={lang}/><p>{bs?'Nova kartica prvo ulazi u stazu sa znakom ?. Izaberi mjesto između poznatih ocjena gdje misliš da pripada. Ne pogađaš broj, nego njen pravilan položaj.':'The new card first enters the lane with a ?. Choose the place between the known scores where you think it belongs. You are not guessing the number, only its correct position.'}</p><RuleLane cards={cards} lang={lang}/><p>{bs?'Game Master zatim otkriva stvarnu ocjenu Stope patnje i pokazuje da li je položaj tačan.':'The Game Master then reveals the real Misery Rate and shows whether the position is correct.'}</p></div>
       </article>
 
       <article className="rulebook-block">
