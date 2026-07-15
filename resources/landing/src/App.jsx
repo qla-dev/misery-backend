@@ -151,17 +151,17 @@ function LegacyGameCard({ card, hidden = false, className = '', animatedArtwork 
 
 function GameCard({ card, hidden = false, className = '', logoArtwork = false }) {
   return <article className={`game-card main-game-card ${className}`}>
-    <div className="main-card-heading">
+    <div className="main-card-content">
       <p>{card.title}</p>
       {card.sub && <small>{card.sub}</small>}
-    </div>
-    <div className={`main-card-artwork ${logoArtwork ? 'logo-artwork' : ''}`}>
-      {logoArtwork
-        ? <MascotLetter className="card-mascot"/>
-        : card.image
-          ? <img alt="" src={card.image}/>
-          : <Pictogram type={card.icon}/>
-      }
+      <div className={`main-card-artwork ${logoArtwork ? 'logo-artwork' : ''}`}>
+        {logoArtwork
+          ? <MascotLetter className="card-mascot"/>
+          : card.image
+            ? <img alt="" src={card.image}/>
+            : <Pictogram type={card.icon}/>
+        }
+      </div>
     </div>
     <div className="main-card-score">
       <span>MISERY RATE</span>
