@@ -147,6 +147,14 @@ class GamePresenceTest extends TestCase
         $this->getJson('/api/games')
             ->assertOk()
             ->assertJsonMissing(['id' => $game->id]);
+
+        $this->postJson("/api/games/{$game->id}/lock", ['user_id' => $host->id, 'pro_active' => false])
+            ->assertOk()
+            ->assertJsonPath('data.is_private', false);
+
+        $this->getJson('/api/games')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $game->id]);
     }
 
     public function test_non_pro_cannot_lock_a_lobby(): void

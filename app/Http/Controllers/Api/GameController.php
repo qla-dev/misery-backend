@@ -231,12 +231,12 @@ class GameController extends Controller
             'pro_active' => ['required', 'boolean'],
         ]);
 
-        abort_unless($data['pro_active'], 403, 'An active Misery PRO subscription is required to create a private room.');
         abort_unless((int) $game->owner_id === (int) $data['user_id'], 403, 'Only the room owner can lock this room.');
         abort_if($game->started, 422, 'A room can only be locked before the game starts.');
         $this->ensurePlayable($game);
+        abort_unless($game->is_private || $data['pro_active'], 403, 'An active Misery PRO subscription is required to create a private room.');
 
-        $game->update(['is_private' => true]);
+        $game->update(['is_private' => ! $game->is_private]);
 
         return $this->full($game->refresh());
     }
