@@ -45,10 +45,13 @@ class CardSeederTest extends TestCase
 
         $this->seed(CardSeeder::class);
 
-        $this->assertSame(100, Card::count());
-        $this->assertSame(100, Card::distinct()->count('title'));
-        $this->assertSame(100, Card::distinct()->count('score'));
-        $scores = Card::orderBy('score')->pluck('score')->map(fn ($score) => (float) $score);
+        $this->assertSame(300, Card::count());
+        $this->assertSame(300, Card::distinct()->count('title'));
+        $this->assertSame(100, Card::where('stack_id', Stack::where('slug', 'normal')->value('id'))->count());
+        $this->assertSame(100, Card::where('stack_id', Stack::where('slug', 'spicy')->value('id'))->count());
+        $this->assertSame(100, Card::where('stack_id', Stack::where('slug', '18-plus')->value('id'))->count());
+        $this->assertSame(100, Card::where('stack_id', Stack::where('slug', 'normal')->value('id'))->distinct()->count('score'));
+        $scores = Card::where('stack_id', Stack::where('slug', 'normal')->value('id'))->orderBy('score')->pluck('score')->map(fn ($score) => (float) $score);
         $this->assertGreaterThanOrEqual(0.01, $scores->first());
         $this->assertSame(99.99, $scores->last());
         $this->assertTrue($scores->every(fn (float $score) => round($score, 2) !== floor($score)));
@@ -114,6 +117,29 @@ class CardSeederTest extends TestCase
         $this->assertSame('cards/uploads/keep.png', $card->image);
         $this->assertSame(6.55, (float) $card->score);
         $this->assertTrue(Game::whereKey($game->id)->exists());
-        $this->assertSame(100, Card::count());
+        $this->assertSame(300, Card::count());
+    }
+
+    public function test_seeded_premium_packs_can_start_with_eight_players(): void
+    {
+        Storage::fake('public');
+        $this->seed(CardSeeder::class);
+
+        foreach (['spicy', '18-plus'] as $packIndex => $slug) {
+            $players = User::factory()->count(8)->create();
+            $game = Game::create([
+                'code' => $packIndex === 0 ? 'SPCY8001' : 'ADLT8001',
+                'owner_id' => $players->first()->id,
+            ]);
+            $game->members()->attach($players->pluck('id'));
+
+            $this->postJson("/api/games/{$game->id}/start", [
+                'user_id' => $players->first()->id,
+                'stack' => $slug,
+                'target_score' => 12,
+            ])->assertOk()->assertJsonPath('data.stack', $slug);
+
+            $this->assertSame(25, DB::table('game_cards')->where('game_id', $game->id)->count());
+        }
     }
 }

@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;700&display=swap" rel="stylesheet">
 <div class="toolbar"><div><h1>Cards</h1><p class="hint">Edit scores, stacks and generated artwork.</p></div><a class="btn" href="{{ route('cms.cards.create') }}">+ New card</a></div>
-<form class="toolbar" method="get"><input name="q" value="{{ request('q') }}" placeholder="Search title or description"><select name="status" style="max-width:180px"><option value="">All statuses</option><option value="0" @selected(request('status')==='0')>Drafts</option><option value="1" @selected(request('status')==='1')>Approved</option></select><button>Filter</button></form>
+<form class="toolbar" method="get"><input name="q" value="{{ request('q') }}" placeholder="Search title or description"><select name="stack" style="max-width:180px"><option value="">All packs</option>@foreach($stacks as $stack)<option value="{{ $stack->id }}" @selected((string)request('stack')===(string)$stack->id)>{{ $stack->name }}</option>@endforeach</select><select name="status" style="max-width:180px"><option value="">All statuses</option><option value="0" @selected(request('status')==='0')>Drafts</option><option value="1" @selected(request('status')==='1')>Approved</option></select><button>Filter</button></form>
 <div class="panel table-wrap"><table><thead><tr><th>Art</th><th>Card</th><th>Score</th><th>Status</th><th>Stack</th><th></th></tr></thead><tbody>
 @forelse($cards as $card)
 @php($image = $card->image && $card->image !== '0' ? (str_starts_with($card->image,'http') ? $card->image : url('/card-images/'.preg_replace('#^storage/#','',$card->image))) : null)

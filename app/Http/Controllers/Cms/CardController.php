@@ -25,9 +25,11 @@ class CardController extends Controller
         $cards = Card::with('stack')->when($request->string('q')->toString(), function ($query, $search) {
             $query->where(fn ($q) => $q->where('title', 'like', "%{$search}%")->orWhere('subtitle', 'like', "%{$search}%"));
         })->when($request->filled('status'), fn ($query) => $query->where('status', $request->boolean('status')))
+            ->when($request->filled('stack'), fn ($query) => $query->where('stack_id', $request->integer('stack')))
             ->orderBy('score')->paginate(25)->withQueryString();
+        $stacks = Stack::query()->orderBy('name')->get();
 
-        return view('cms.cards.index', compact('cards'));
+        return view('cms.cards.index', compact('cards', 'stacks'));
     }
 
     public function create()

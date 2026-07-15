@@ -27,6 +27,7 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)->get('/cms/cards')
             ->assertOk()
             ->assertSee('Bad day')
+            ->assertSee('All packs')
             ->assertSee('Export HQ PNG')
             ->assertSee('CARD_EXPORT_WIDTH=1200', false);
         $this->withServerVariables($server)->get('/cms/native-card-artwork')

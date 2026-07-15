@@ -16,7 +16,7 @@ class CardSeeder extends Seeder
     public function run(): void
     {
         $normal = Stack::firstOrCreate(['slug' => 'normal'], ['name' => 'Normal']);
-        Stack::firstOrCreate(['slug' => 'spicy'], ['name' => 'Spicy']);
+        $spicy = Stack::firstOrCreate(['slug' => 'spicy'], ['name' => 'Spicy']);
         $adult = Stack::firstOrCreate(['slug' => '18-plus'], ['name' => '18+']);
 
         $events = [
@@ -141,13 +141,61 @@ class CardSeeder extends Seeder
             ['A Meteorite Punches Through Your Roof', 'The impossible rock misses you, destroys the house, and starts smoking.', 96.1],
         ];
 
-        $adultEvents = [
-            ['Your Parents Walk In at the Worst Possible Moment', 'The door opens before either of you can reach the sheets.', 'Roditelji upadaju u najgorem mogućem trenutku', 'Vrata se otvaraju prije nego što iko od vas uspije dohvatiti pokrivač.', 62.18],
-            ['Send a Nude to the Family Group Chat', 'Read receipts appear before you can find the delete button.', 'Pošalješ golu fotografiju u porodičnu grupu', 'Potvrde o čitanju pojavljuju se prije nego što pronađeš dugme za brisanje.', 78.45],
-            ['The Condom Breaks During a One-Night Stand', 'The mood disappears instantly and neither of you knows what comes next.', 'Kondom pukne tokom avanture za jednu noć', 'Raspoloženje nestaje istog trenutka, a niko od vas ne zna šta slijedi.', 84.72],
-            ['Say Your Ex’s Name During Sex', 'The room goes silent while both of you process exactly what you said.', 'Tokom seksa izgovoriš ime bivše osobe', 'U sobi nastaje tišina dok oboje shvatate šta si upravo rekao ili rekla.', 55.36],
-            ['Your Intimate Video Plays on the Office Screen', 'The presentation connects to the wrong file while the entire team watches.', 'Intimni video počne se reproducirati na uredskom ekranu', 'Prezentacija otvara pogrešan fajl dok cijeli tim gleda u ekran.', 91.64],
-        ];
+        $spicyEvents = $this->expandPremiumEvents([
+            ['A Cow Bites You on the Butt', 'You only wanted a photo; the cow chose violence.'],
+            ['A Goat Eats Half Your Trousers', 'It keeps chewing while you negotiate for the part you are still wearing.'],
+            ['A Porta-Potty Rolls Downhill With You Inside', 'Every bump makes the locked door feel less reassuring.'],
+            ['A Raccoon Steals Your Underwear While You Swim', 'It carries the only dry pair into the woods like a trophy.'],
+            ['A Goose Chases You Through a Funeral', 'Respectful silence ends when the bird chooses you as its enemy.'],
+            ['Your Dentures Fly Into Someone’s Soup', 'The table watches them sink beneath the noodles.'],
+            ['A Monkey Throws Your Phone Into a Volcano', 'It makes eye contact before releasing your entire digital life.'],
+            ['A Seagull Poops Directly Into Your Open Mouth', 'You looked up at exactly the wrong second.'],
+            ['Your Wig Lands on the Wedding Cake', 'The photographer captures the exact moment it becomes decoration.'],
+            ['A Horse Sneezes Into Your Face', 'The spray reaches places you did not know needed washing.'],
+            ['A Skunk Sprays You Inside a Rental Car', 'The windows are closed and the security deposit is already gone.'],
+            ['A Llama Spits During Your Job Interview', 'The interviewer stays perfectly dry and continues asking questions.'],
+            ['A Rooster Attacks Your Bare Legs', 'The shortcut across the farm becomes a full sprint for survival.'],
+            ['Your Hammock Snaps Above a Mud Pit', 'For one peaceful second you are floating; then you are seasoning the mud.'],
+            ['A Parade Float Drives Away With You on the Toilet', 'The wall opens and the crowd assumes you are part of the show.'],
+            ['Your Inflatable Boat Deflates in a Duck Pond', 'The ducks gather to watch you slowly become part of the pond.'],
+            ['A Squirrel Hides Acorns in Your Wedding Dress', 'They begin falling out halfway down the aisle.'],
+            ['Your False Eyelash Glues Both Eyes Shut', 'Everyone thinks you are being dramatic until you hit the wall.'],
+            ['A Pig Steals Your Picnic and Your Car Keys', 'It eats lunch first and then disappears with your way home.'],
+            ['Your Chair Collapses During a Silent Ceremony', 'The crack echoes longer than the speech that follows.'],
+            ['A Pelican Swallows Your Microphone', 'The speech continues from somewhere inside the bird.'],
+            ['Your Tanning Spray Turns Bright Green', 'The bottle promised bronze and delivered swamp creature.'],
+            ['A Donkey Brays Through Your Entire Proposal', 'Every romantic sentence is answered with a louder opinion.'],
+            ['A Crab Refuses to Let Go of Your Toe', 'You cross the beach with a new accessory and no dignity.'],
+            ['A Circus Clown Gets Trapped in Your Chimney', 'The noises are terrifying until a red shoe drops into the fireplace.'],
+        ], 'spicy');
+
+        $adultEvents = $this->expandPremiumEvents([
+            ['Your Parents Walk In During Sex', 'The door opens before either of you can reach the sheets.'],
+            ['Send a Nude to the Family Group Chat', 'Read receipts appear before you can find the delete button.'],
+            ['The Condom Breaks During a One-Night Stand', 'The mood disappears instantly and neither of you knows what comes next.'],
+            ['Say Your Ex’s Name During Sex', 'The room goes silent while both of you process exactly what you said.'],
+            ['Your Intimate Video Plays on the Office Screen', 'The presentation connects to the wrong file while the entire team watches.'],
+            ['A Sex Toy Falls Out of Your Bag at Security', 'The scanner operator raises it while the entire queue watches.'],
+            ['Your Partner Finds Your Secret Dating Profile', 'The active status makes every explanation sound worse.'],
+            ['Your Nude Selfie Syncs to the Family Television', 'The slideshow changes before anyone can find the remote.'],
+            ['The Hotel Cleaner Walks In Mid-Position', 'The do-not-disturb sign is still hanging safely inside the room.'],
+            ['You Moan the Wrong Name Loud Enough for the Neighbors', 'The wall goes quiet and your partner asks one very specific question.'],
+            ['Your Handcuff Key Breaks in the Lock', 'The playful experiment becomes an awkward call for professional help.'],
+            ['Your Boss Receives Your Sext Instead of Your Partner', 'The typing indicator appears and then disappears for a very long time.'],
+            ['Your Bedroom Livestream Accidentally Goes Public', 'The viewer count climbs before you notice the red icon.'],
+            ['A Condom Falls Out During a Family Dinner', 'It lands in the middle of the table between the bread and your grandmother.'],
+            ['Your Partner’s Parent Finds You Naked in the Kitchen', 'You were looking for water and find the entire family instead.'],
+            ['Your Dirty Talk Activates the Smart Speaker', 'The recording is saved and sent to the shared household account.'],
+            ['A Neighbor Returns Your Vibrating Package', 'They explain exactly how long it has been making noise.'],
+            ['You Get Stuck in a Compromising Position', 'The cramp arrives first and the emergency call becomes unavoidable.'],
+            ['Your Ex Sends Intimate Screenshots to Your New Partner', 'Years of private messages arrive without context or warning.'],
+            ['The Bed Collapses Through the Apartment Floor', 'The neighbors downstairs discover far more than the structural damage.'],
+            ['Your Waxing Appointment Removes Much More Than Planned', 'The mirror confirms that the requested shape is no longer possible.'],
+            ['Your Date Discovers the Matching Tattoo With Your Ex', 'The lights are already off when they recognize the initials.'],
+            ['Your Partner’s Name Is Tattooed in the Wrong Place', 'The artist reveals the spelling mistake after the final wipe.'],
+            ['A Private Voice Note Plays Through the Bar Speakers', 'Your detailed plans replace the music for everyone in the room.'],
+            ['The Fire Alarm Starts While You Are Both Naked', 'The entire hotel waits outside while you share one tiny towel.'],
+        ], 'adult');
 
         // Explicitly ranked after comparing the consequence described on every card.
         // The order moves from embarrassment/inconvenience through lasting loss and
@@ -287,7 +335,7 @@ class CardSeeder extends Seeder
             return;
         }
 
-        DB::transaction(function () use ($adult, $adultEvents, $events, $normal) {
+        DB::transaction(function () use ($adult, $adultEvents, $events, $normal, $spicy, $spicyEvents) {
             DB::table('moves')->delete();
             DB::table('game_cards')->delete();
             DB::table('members')->delete();
@@ -309,9 +357,7 @@ class CardSeeder extends Seeder
             Card::query()->insert(array_map(fn (array $event) => [
                 'title' => $event[0],
                 'subtitle' => $event[1],
-                'title_bs' => $event[2],
-                'subtitle_bs' => $event[3],
-                'score' => $event[4],
+                'score' => $event[2],
                 'image' => '0',
                 'svg_img' => null,
                 'deck' => '18-plus',
@@ -320,10 +366,55 @@ class CardSeeder extends Seeder
                 'created_at' => $now,
                 'updated_at' => $now,
             ], $adultEvents));
+            Card::query()->insert(array_map(fn (array $event) => [
+                'title' => $event[0],
+                'subtitle' => $event[1],
+                'score' => $event[2],
+                'image' => '0',
+                'svg_img' => null,
+                'deck' => 'spicy',
+                'stack_id' => $spicy->id,
+                'status' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], $spicyEvents));
         });
 
         Storage::disk('public')->deleteDirectory('cards/generated');
         Storage::disk('public')->deleteDirectory('cards/generated-svg');
         Storage::disk('public')->deleteDirectory('cards/uploads');
+    }
+
+    private function expandPremiumEvents(array $events, string $tone): array
+    {
+        $variants = $tone === 'adult'
+            ? [
+                ['', ''],
+                [' — At Your Partner’s Parents’ House', 'To make it worse, their parents are close enough to hear everything.'],
+                [' — During a Video Call', 'The camera is on, the microphone is live, and disconnecting takes far too long.'],
+                [' — On Your First Night Together', 'Neither of you knows whether laughing will make the situation better or worse.'],
+            ]
+            : [
+                ['', ''],
+                [' — In Front of Everyone', 'A full crowd gets an unobstructed view of the disaster.'],
+                [' — While Being Livestreamed', 'The viewer count rises while the situation keeps getting worse.'],
+                [' — Five Minutes Before a Big Event', 'There is no time to clean up, change clothes, or invent a believable excuse.'],
+            ];
+
+        $expanded = [];
+        foreach ($events as $eventIndex => $event) {
+            foreach ($variants as $variantIndex => $variant) {
+                $position = $eventIndex * count($variants) + $variantIndex;
+                $title = $event[0].$variant[0];
+                $hundredth = $position === 99 ? 99 : abs(crc32($title)) % 99 + 1;
+                $expanded[] = [
+                    $title,
+                    trim($event[1].' '.$variant[1]),
+                    $position + ($hundredth / 100),
+                ];
+            }
+        }
+
+        return $expanded;
     }
 }
