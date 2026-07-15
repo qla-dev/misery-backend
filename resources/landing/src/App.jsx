@@ -229,7 +229,7 @@ function WebRulebook({ cards, lang }) {
         <div className="rulebook-outcomes"><div className="correct"><i/><section><b>{bs?'TAČNO':'RIGHT'}</b><p>{bs?'Zeleni overlay znači da je položaj tačan. Kartica ostaje u tvojoj stazi.':'A green overlay means the position is correct. The card stays in your lane.'}</p></section></div><div className="wrong"><i/><section><b>{bs?'POGREŠNO':'WRONG'}</b><p>{bs?'Crveni overlay znači da je procjena bila previsoka ili preniska. Kartica ne ulazi u tvoju stazu.':'A red overlay means your guess was too high or too low. The card does not enter your lane.'}</p></section></div></div>
       </article>
 
-      <article className="rulebook-block">
+      <article className="rulebook-block rulebook-steal">
         <RuleBand number="8">{bs?'KRAĐA':'STEALING'}</RuleBand>
         <div className="rulebook-outcomes"><div className="steal"><i/><section><b>{bs?'PRILIKA ZA KRAĐU':'STEAL CHANCE'}</b><p>{bs?'Nakon pogrešnog poteza, ostali igrači redom dobijaju posebni overlay sa izborom da prihvate ili preskoče krađu. Ko prihvati, pokušava pravilno postaviti istu karticu u svoju stazu. Uspješna krađa dodaje karticu kradljivcu; ako svi preskoče ili pogriješe, kartica se odbacuje.':'After a wrong move, the other players receive a dedicated overlay in order and may accept or pass the steal. Whoever accepts tries to place the same card correctly in their own lane. A successful steal adds it to the stealer’s lane; if everyone passes or misses, the card is discarded.'}</p></section></div></div>
       </article>
