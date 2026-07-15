@@ -112,4 +112,38 @@ class GamePresenceTest extends TestCase
 
         $this->assertNotNull($game->refresh()->terminated_at);
     }
+
+    public function test_host_can_remove_a_guest_only_while_in_the_lobby(): void
+    {
+        $host = User::factory()->create(['color' => 'yellow']);
+        $guest = User::factory()->create(['color' => 'blue']);
+        $game = Game::create(['code' => 'KICK1234', 'owner_id' => $host->id, 'started' => false]);
+        $game->members()->attach([$host->id, $guest->id]);
+
+        $this->postJson("/api/games/{$game->id}/kick", ['user_id' => $host->id, 'player_id' => $guest->id])
+            ->assertOk()
+            ->assertJsonCount(1, 'data.members')
+            ->assertJsonPath('data.members.0.id', $host->id);
+
+        $this->assertDatabaseMissing('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
+
+        $game->members()->attach($guest->id);
+        $game->update(['started' => true]);
+        $this->postJson("/api/games/{$game->id}/kick", ['user_id' => $host->id, 'player_id' => $guest->id])
+            ->assertUnprocessable();
+        $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
+    }
+
+    public function test_guest_cannot_remove_another_lobby_player(): void
+    {
+        $host = User::factory()->create(['color' => 'yellow']);
+        $guest = User::factory()->create(['color' => 'blue']);
+        $otherGuest = User::factory()->create(['color' => 'emerald']);
+        $game = Game::create(['code' => 'SAFE1234', 'owner_id' => $host->id, 'started' => false]);
+        $game->members()->attach([$host->id, $guest->id, $otherGuest->id]);
+
+        $this->postJson("/api/games/{$game->id}/kick", ['user_id' => $guest->id, 'player_id' => $otherGuest->id])
+            ->assertForbidden();
+        $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $otherGuest->id]);
+    }
 }

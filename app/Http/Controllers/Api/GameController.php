@@ -224,6 +224,37 @@ class GameController extends Controller
         return $this->full($game);
     }
 
+    public function kickPlayer(Request $request, Game $game)
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'integer'],
+            'player_id' => ['required', 'integer', 'different:user_id'],
+        ]);
+
+        return DB::transaction(function () use ($data, $game) {
+            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
+            $this->ensurePlayable($game);
+            abort_if($game->started, 422, 'Players can only be removed while the game is in the lobby.');
+            abort_unless((int) $game->owner_id === (int) $data['user_id'], 403, 'Only the room host can remove players.');
+            abort_if((int) $game->owner_id === (int) $data['player_id'], 422, 'The room host cannot be removed.');
+            abort_unless(
+                DB::table('members')->where('game_id', $game->id)->where('user_id', $data['player_id'])->exists(),
+                404,
+                'Player is not in this room.'
+            );
+
+            DB::table('members')->where('game_id', $game->id)->where('user_id', $data['player_id'])->delete();
+            DB::table('game_cards')->where('game_id', $game->id)->where('user_id', $data['player_id'])->delete();
+            Log::info('Lobby player removed by host', [
+                'game_id' => $game->id,
+                'host_id' => (int) $data['user_id'],
+                'player_id' => (int) $data['player_id'],
+            ]);
+
+            return $this->full($game->refresh());
+        });
+    }
+
     public function update(Request $request, Game $game)
     {
         $game->update($request->validate(['started' => 'sometimes|boolean']));

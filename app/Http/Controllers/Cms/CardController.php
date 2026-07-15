@@ -18,7 +18,7 @@ use Throwable;
 
 class CardController extends Controller
 {
-    private const MAX_GENERATED_JPEG_BYTES = 2097152;
+    private const MAX_GENERATED_JPEG_BYTES = 102400;
 
     public function index(Request $request)
     {
@@ -152,6 +152,8 @@ class CardController extends Controller
             'The four canvas corners must be square and pure black. There must be no white corner wedges, margin, padding outside the black background, visible outer canvas, transparency, alpha, checkerboard pattern, border, or contrasting area around the black scene.',
             'Absolute frame ban: do not draw any enclosing rectangle, square, outline, keyline, stroke, picture frame, card frame, poster frame, inner border, outer border, white border, amber border, or decorative line around the scene. No line may run parallel to and connect around the four canvas edges. The artwork must remain an open edge-to-edge scene on black.',
             'Quality: render at 1024×1024 or higher with smooth antialiasing, clean curves, crisp shape boundaries, and no pixelation, jagged edges, compression artifacts, grain, noise, halftone dots, texture, or blur.',
+            'Production sharpness pass: render every silhouette and geometric shape as if it were precision vector artwork, with decisive high-contrast boundaries, smooth curves, clean joins, and legible small details. Inspect the result at 200% and eliminate soft focus, smeared edges, stair-stepping, fuzzy halos, color fringing, and malformed micro-details before returning it.',
+            'Lightweight delivery design: keep the scene visually bold and economical enough to encode as a 1024×1024 JPEG below 100 KB without visible degradation. Prefer large clean filled shapes over noisy micro-detail, dense texture, or needless tiny fragments; file-size optimization must never reduce edge sharpness or introduce pixelation.',
             'Zero typography rule: the generated image must contain absolutely no text-like marks: no words, letters, numbers, digits, decimal points, scores, ratings, captions, labels, signs, UI, symbols that resemble writing, logos, or watermark. Do not render the card title, description, or misery score inside the artwork.',
             'Output is illustration only: never depict a finished game card, card shell, poster, badge, score panel, caption area, title area, UI panel, or rounded rectangular container. The JPEG itself is the scene, not a picture of a card.',
             'Constraints: JPEG; no card frame, border, gradients, lighting effects, or shadows. Use only black #000000, white #FFFFFF, and amber #FACC15.',
@@ -269,7 +271,7 @@ class CardController extends Controller
                 'jpeg_bytes' => strlen($jpeg),
                 'storage_path' => $path,
             ]);
-            abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 502, 'Generated JPEG is larger than 2 MB after conversion. Please generate it again.');
+            abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 502, 'Generated JPEG could not be optimized below 100 KB without unacceptable quality loss. Please generate it again.');
             Storage::disk('public')->put($path, $jpeg);
             abort_unless(Storage::disk('public')->exists($path), 500, 'Generated PNG was not found after writing it to storage.');
             $this->deleteManagedImage($card->image);
@@ -324,7 +326,7 @@ class CardController extends Controller
         abort_if(strlen($image) > 8 * 1024 * 1024, 422, 'The cropped artwork is too large.');
 
         $jpeg = $this->convertCroppedImageToJpeg($image);
-        abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 422, 'The cropped JPEG is larger than 2 MB. Please zoom or crop it again.');
+        abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 422, 'The cropped JPEG could not be optimized below 100 KB. Please zoom or crop it again.');
 
         $path = 'cards/generated/card-'.$card->id.'-cropped-'.Str::uuid().'.jpg';
         Storage::disk('public')->put($path, $jpeg);
@@ -584,6 +586,7 @@ class CardController extends Controller
                 'data' => base64_encode($styleReference['data']),
             ]];
         }
+        $parts[] = ['text' => 'Final quality-control pass: inspect the completed illustration at 200% before returning it. Re-render any soft, fuzzy, pixelated, jagged, smeared, or color-fringed boundary as a crisp precision-vector edge. Keep shapes bold and economical so the final 1024×1024 JPEG can be optimized below 100 KB without visible artifacts. Return only the finished image.'];
 
         Log::info('CMS artwork sending direct Gemini fallback request', $logContext + [
             'gemini_model' => $model,
@@ -748,9 +751,7 @@ class CardController extends Controller
         imagealphablending($jpegCanvas, true);
         imagecopy($jpegCanvas, $source, 0, 0, 0, 0, $sourceWidth, $sourceHeight);
 
-        ob_start();
-        imagejpeg($jpegCanvas, null, 96);
-        $result = ob_get_clean();
+        $result = $this->encodeCardJpeg($jpegCanvas);
         imagedestroy($source);
         imagedestroy($jpegCanvas);
 
@@ -779,12 +780,30 @@ class CardController extends Controller
         }
 
         $source = $this->enforceGeneratedPaletteAndSquareCorners($source);
-        ob_start();
-        imagejpeg($source, null, 96);
-        $result = ob_get_clean();
+        $result = $this->encodeCardJpeg($source);
         imagedestroy($source);
 
         abort_unless(is_string($result) && $result !== '', 422, 'The cropped artwork could not be encoded as JPEG.');
+
+        return $result;
+    }
+
+    private function encodeCardJpeg(\GdImage $source): string
+    {
+        imageinterlace($source, true);
+        $result = '';
+
+        foreach ([92, 88, 84, 80, 76, 72, 68, 64, 60] as $quality) {
+            ob_start();
+            imagejpeg($source, null, $quality);
+            $encoded = ob_get_clean();
+            abort_unless(is_string($encoded) && $encoded !== '', 500, 'Card artwork could not be encoded as JPEG.');
+            $result = $encoded;
+
+            if (strlen($result) <= self::MAX_GENERATED_JPEG_BYTES) {
+                break;
+            }
+        }
 
         return $result;
     }

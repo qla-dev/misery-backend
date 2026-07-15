@@ -72,6 +72,7 @@ class CmsTest extends TestCase
         $path = $card->fresh()->image;
         Storage::disk('public')->assertExists($path);
         $this->assertStringEndsWith('.jpg', $path);
+        $this->assertLessThanOrEqual(100 * 1024, strlen(Storage::disk('public')->get($path)));
         $this->withServerVariables($server)->get('/cms/cards/'.$card->id.'/edit')
             ->assertOk()
             ->assertSee('generatedCropForm');
@@ -146,7 +147,9 @@ class CmsTest extends TestCase
             && str_contains($request['prompt'], 'Absolute gradient ban')
             && str_contains($request['prompt'], 'Flat solid fills only')
             && str_contains($request['prompt'], 'pure black #000000')
-            && str_contains($request['prompt'], 'no pixelation');
+            && str_contains($request['prompt'], 'no pixelation')
+            && str_contains($request['prompt'], 'Production sharpness pass')
+            && str_contains($request['prompt'], 'below 100 KB');
         });
     }
 
@@ -322,6 +325,7 @@ class CmsTest extends TestCase
         $this->assertNotSame($originalPath, $croppedPath);
         Storage::disk('public')->assertMissing($originalPath);
         Storage::disk('public')->assertExists($croppedPath);
+        $this->assertLessThanOrEqual(100 * 1024, strlen(Storage::disk('public')->get($croppedPath)));
         $saved = imagecreatefromstring(Storage::disk('public')->get($croppedPath));
         $this->assertNotFalse($saved);
         $this->assertSame(1024, imagesx($saved));
