@@ -105,5 +105,6 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::post('generator', [CmsCardGeneratorController::class, 'generate'])->name('generator.generate');
     Route::get('stacks', [CmsStackController::class, 'index'])->name('stacks.index');
     Route::post('stacks', [CmsStackController::class, 'store'])->name('stacks.store');
+    Route::patch('stacks/{stack}', [CmsStackController::class, 'update'])->name('stacks.update');
     Route::delete('stacks/{stack}', [CmsStackController::class, 'destroy'])->name('stacks.destroy');
 });

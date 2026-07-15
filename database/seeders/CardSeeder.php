@@ -15,9 +15,9 @@ class CardSeeder extends Seeder
 
     public function run(): void
     {
-        $normal = Stack::firstOrCreate(['slug' => 'normal'], ['name' => 'Normal']);
-        $spicy = Stack::firstOrCreate(['slug' => 'spicy'], ['name' => 'Spicy']);
-        $adult = Stack::firstOrCreate(['slug' => '18-plus'], ['name' => '18+']);
+        $normal = Stack::updateOrCreate(['slug' => 'normal'], ['name' => 'Normal', 'color' => '#facc15', 'icon_key' => 'sparkles', 'description' => 'Funny and awkward situations', 'description_bs' => 'Smiješne i čudne situacije']);
+        $spicy = Stack::updateOrCreate(['slug' => 'spicy'], ['name' => 'Spicy', 'color' => '#fb7185', 'icon_key' => 'flame', 'description' => 'Friendly, absurd and wildly unfortunate', 'description_bs' => 'Prijateljski, apsurdno i divlje']);
+        $adult = Stack::updateOrCreate(['slug' => '18-plus'], ['name' => '18+', 'color' => '#ef4444', 'icon_key' => 'shield-alert', 'description' => 'Explicit sexual situations for adults only', 'description_bs' => 'Eksplicitne seksualne situacije samo za odrasle']);
 
         $events = [
             // Travel disasters

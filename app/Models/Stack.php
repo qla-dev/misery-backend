@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Stack extends Model
 {
-    protected $fillable = ['name', 'slug'];
+    protected $fillable = ['name', 'slug', 'color', 'icon_key', 'description', 'description_bs'];
 
     public function cards() { return $this->hasMany(Card::class); }
 }

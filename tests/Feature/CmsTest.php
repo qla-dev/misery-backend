@@ -56,6 +56,30 @@ class CmsTest extends TestCase
         $this->assertFalse($card->fresh()->status);
     }
 
+    public function test_cms_updates_stack_presentation_exposed_to_native_clients(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->patch('/cms/stacks/'.$stack->id, [
+            'name' => 'Normal Plus',
+            'color' => '#12ABEF',
+            'icon_key' => 'party-popper',
+            'description' => 'Updated English description',
+            'description_bs' => 'Ažurirani bosanski opis',
+        ])->assertRedirect()->assertSessionHas('success', 'Stack updated.');
+
+        $this->getJson('/api/stacks')->assertOk()
+            ->assertJsonFragment([
+                'slug' => 'normal',
+                'name' => 'Normal Plus',
+                'color' => '#12ABEF',
+                'icon_key' => 'party-popper',
+                'description_bs' => 'Ažurirani bosanski opis',
+                'is_premium' => false,
+            ]);
+    }
+
     public function test_cms_ai_translation_explicitly_requests_standard_bosnian_and_returns_editable_copy(): void
     {
         config([
