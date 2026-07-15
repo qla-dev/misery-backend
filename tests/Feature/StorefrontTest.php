@@ -42,6 +42,11 @@ class StorefrontTest extends TestCase
         $this->withServerVariables([
             'PHP_AUTH_USER' => config('cms.username'),
             'PHP_AUTH_PW' => config('cms.password'),
-        ])->get('/simulator')->assertOk()->assertSee('Create game');
+        ])->get('/simulator')
+            ->assertOk()
+            ->assertSee('Create game')
+            ->assertSee('Game chat')
+            ->assertSee('Leave room')
+            ->assertSee("'/messages'", false);
     }
 }
