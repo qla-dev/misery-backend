@@ -212,6 +212,44 @@ class GameSyncTransportTest extends TestCase
         $this->assertDatabaseHas('games', ['sync_driver' => 'pusher']);
     }
 
+    public function test_simulator_can_request_an_initial_transport_for_a_room(): void
+    {
+        Stack::firstOrCreate(['slug' => 'normal'], ['name' => 'Normal', 'color' => '#000000', 'icon_key' => 'layers']);
+        $allocator = \Mockery::mock(RealtimeTransportAllocator::class);
+        $allocator->shouldReceive('selectForNewRoom')->once()->with('ably')->andReturn('ably');
+        $this->app->instance(RealtimeTransportAllocator::class, $allocator);
+
+        $this->postJson('/api/games', [
+            'name' => 'Simulator Host',
+            'color' => 'yellow',
+            'stack' => 'normal',
+            'sync_driver' => 'ably',
+        ])->assertCreated()->assertJsonPath('game.sync_driver', 'ably');
+    }
+
+    public function test_native_join_is_rejected_with_a_stable_error_code_when_provider_is_full(): void
+    {
+        $host = User::factory()->create();
+        $game = Game::create(['code' => 'FULL1001', 'owner_id' => $host->id, 'sync_driver' => 'pusher']);
+        $game->members()->attach($host);
+
+        $allocator = \Mockery::mock(RealtimeTransportAllocator::class);
+        $allocator->shouldReceive('providerAvailable')->with('pusher')->once()->andReturn(true);
+        $allocator->shouldReceive('providerAvailable')->with('ably')->once()->andReturn(true);
+        $allocator->shouldReceive('canJoinWithoutReallocation')->once()->andReturn(false);
+        $allocator->shouldNotReceive('ensureCapacityForJoin');
+        $this->app->instance(RealtimeTransportAllocator::class, $allocator);
+
+        $this->postJson('/api/games/code/FULL1001/join', [
+            'name' => 'Native Player',
+            'color' => 'blue',
+            'client' => 'native',
+        ])->assertStatus(409)
+            ->assertJsonPath('error_code', 'realtime_provider_capacity_exceeded');
+
+        $this->assertSame(1, $game->members()->count());
+    }
+
     public function test_ably_room_returns_scoped_token_request_without_exposing_secret(): void
     {
         config(['broadcasting.connections.ably.key' => 'app.key:super-secret']);
@@ -265,6 +303,7 @@ class GameSyncTransportTest extends TestCase
         $allocator->shouldReceive('usage')->with('pusher')->andReturn(1);
         $allocator->shouldReceive('usage')->with('ably')->andReturn(0);
 
+        $this->assertFalse($allocator->canJoinWithoutReallocation($game));
         $this->assertSame('ably', $allocator->ensureCapacityForJoin($game));
         $this->assertSame('ably', $game->refresh()->sync_driver);
     }

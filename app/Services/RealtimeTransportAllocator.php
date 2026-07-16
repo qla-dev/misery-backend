@@ -13,7 +13,7 @@ class RealtimeTransportAllocator
 {
     private const HOSTED_PROVIDERS = ['pusher', 'ably'];
 
-    public function selectForNewRoom(): string
+    public function selectForNewRoom(?string $preferred = null): string
     {
         if ($this->reverbOverrideEnabled()) {
             $this->assertReverbConfigured();
@@ -21,7 +21,37 @@ class RealtimeTransportAllocator
             return 'reverb';
         }
 
+        if ($preferred === 'polling') {
+            return 'polling';
+        }
+
+        if ($preferred === 'reverb') {
+            return $this->reverbConfigured() && $this->reverbHasCapacity(1)
+                ? 'reverb'
+                : $this->firstAvailable(1);
+        }
+
+        if (in_array($preferred, self::HOSTED_PROVIDERS, true)) {
+            if ($this->providerAvailable($preferred) && $this->usage($preferred) + 1 <= $this->capacity($preferred)) {
+                return $preferred;
+            }
+
+            return $this->firstAvailable(1, [$preferred]);
+        }
+
         return $this->firstAvailable(1);
+    }
+
+    public function canJoinWithoutReallocation(Game $game): bool
+    {
+        $current = $game->sync_driver ?: 'polling';
+
+        if ($current === 'reverb') {
+            return $this->reverbHasCapacity(1);
+        }
+
+        return ! in_array($current, self::HOSTED_PROVIDERS, true)
+            || $this->usage($current) + 1 <= $this->capacity($current);
     }
 
     public function ensureCapacityForJoin(Game $game): string
@@ -210,6 +240,20 @@ class RealtimeTransportAllocator
             && filled($config['key'] ?? null)
             && filled($config['secret'] ?? null)
             && filled($config['options']['host'] ?? null);
+    }
+
+    private function reverbHasCapacity(int $requiredConnections): bool
+    {
+        $limit = config('reverb.apps.apps.0.max_connections');
+        if (! filled($limit)) {
+            return true;
+        }
+
+        $usage = $this->reverbOverrideEnabled()
+            ? $this->allActiveMembers()
+            : $this->assignedUsage('reverb');
+
+        return $usage + $requiredConnections <= (int) $limit;
     }
 
     private function assignedUsage(string $provider): int

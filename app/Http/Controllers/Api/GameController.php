@@ -259,11 +259,14 @@ class GameController extends Controller
             'email' => 'nullable|email',
             'color' => 'nullable|in:'.implode(',', self::COLORS),
             'stack' => 'sometimes|string|exists:stacks,slug',
+            'sync_driver' => 'sometimes|nullable|in:pusher,ably,polling,reverb',
         ]);
         $stack = Stack::where('slug', $data['stack'] ?? 'normal')->firstOrFail();
 
         return Cache::lock('realtime-transport-allocation', 15)->block(10, function () use ($data, $stack) {
-            $syncDriver = $this->transportAllocator->selectForNewRoom();
+            $syncDriver = isset($data['sync_driver'])
+                ? $this->transportAllocator->selectForNewRoom($data['sync_driver'])
+                : $this->transportAllocator->selectForNewRoom();
 
             return DB::transaction(function () use ($data, $stack, $syncDriver) {
                 $user = User::create([
@@ -442,7 +445,12 @@ class GameController extends Controller
 
     public function join(Request $request, string $code)
     {
-        $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'nullable|email', 'color' => 'nullable|in:'.implode(',', self::COLORS)]);
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'nullable|email',
+            'color' => 'nullable|in:'.implode(',', self::COLORS),
+            'client' => 'sometimes|nullable|in:native,web,simulator',
+        ]);
         if (! config('game.reverb_override')) {
             $this->transportAllocator->providerAvailable('pusher');
             $this->transportAllocator->providerAvailable('ably');
@@ -454,6 +462,12 @@ class GameController extends Controller
                 $this->ensurePlayable($game);
                 abort_if($game->started, 422, 'Game already started.');
                 abort_if($game->members()->count() >= config('game.max_players'), 422, 'No more available seats in this room.');
+                if (($data['client'] ?? null) === 'native' && ! $this->transportAllocator->canJoinWithoutReallocation($game)) {
+                    return response()->json([
+                        'message' => 'Započeta igra je na serveru koji je opterećen. Izaberi drugu igru ili pokušaj kasnije.',
+                        'error_code' => 'realtime_provider_capacity_exceeded',
+                    ], 409);
+                }
                 $previousDriver = $game->sync_driver;
                 $this->transportAllocator->ensureCapacityForJoin($game);
                 if ($game->sync_driver !== $previousDriver) {
