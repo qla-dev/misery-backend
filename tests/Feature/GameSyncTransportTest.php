@@ -231,6 +231,27 @@ class GameSyncTransportTest extends TestCase
             ->assertJsonMissing(['secret' => 'super-secret']);
     }
 
+    public function test_ably_room_updates_use_the_direct_ably_publisher(): void
+    {
+        Event::fake([GameUpdated::class]);
+        $host = User::factory()->create();
+        $game = Game::create(['code' => 'SYNC1007', 'owner_id' => $host->id, 'sync_driver' => 'ably']);
+        $game->members()->attach($host);
+
+        $allocator = \Mockery::mock(RealtimeTransportAllocator::class);
+        $allocator->shouldReceive('publishAblyGameUpdate')
+            ->once()
+            ->with($game->id, 'host.presence');
+        $this->app->instance(RealtimeTransportAllocator::class, $allocator);
+
+        $this->postJson("/api/games/{$game->id}/host-lobby-presence", [
+            'user_id' => $host->id,
+            'present' => false,
+        ])->assertOk();
+
+        Event::assertNotDispatched(GameUpdated::class);
+    }
+
     public function test_full_pusher_room_moves_to_ably_before_accepting_another_connection(): void
     {
         $host = User::factory()->create();

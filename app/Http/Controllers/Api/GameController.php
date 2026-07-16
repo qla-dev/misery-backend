@@ -48,7 +48,11 @@ class GameController extends Controller
 
         DB::afterCommit(function () use ($gameId, $reason, $driver) {
             try {
-                GameUpdated::dispatch($gameId, $reason, $driver);
+                if ($driver === 'ably') {
+                    $this->transportAllocator->publishAblyGameUpdate($gameId, $reason);
+                } else {
+                    GameUpdated::dispatch($gameId, $reason, $driver);
+                }
             } catch (\Throwable $error) {
                 Log::error('Realtime game update failed', [
                     'game_id' => $gameId,

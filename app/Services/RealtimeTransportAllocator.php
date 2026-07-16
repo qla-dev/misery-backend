@@ -64,7 +64,11 @@ class RealtimeTransportAllocator
                 if ($provider === 'pusher') {
                     $this->pusher()->get('/channels', [], true);
                 } else {
-                    $this->ably()->auth->requestToken(['ttl' => 60_000]);
+                    $ably = $this->ably();
+                    $ably->auth->requestToken(['ttl' => 60_000]);
+                    $ably->channels->get('misery-meter.health')->publish('health.check', [
+                        'sent_at' => now()->toISOString(),
+                    ]);
                 }
 
                 return true;
@@ -83,6 +87,19 @@ class RealtimeTransportAllocator
             'ttl' => 60 * 60 * 1000,
             'capability' => ["game.{$game->id}" => ['subscribe']],
         ]);
+    }
+
+    public function publishAblyGameUpdate(int $gameId, string $reason): void
+    {
+        $published = $this->ably()->channels->get("game.{$gameId}")->publish('game.updated', [
+            'game_id' => $gameId,
+            'reason' => $reason,
+            'sent_at' => now()->toISOString(),
+        ]);
+
+        if ($published !== true) {
+            throw new \RuntimeException("Ably did not confirm publishing game.updated for game {$gameId}.");
+        }
     }
 
     public function usage(string $provider): int
