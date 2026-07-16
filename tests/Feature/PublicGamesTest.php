@@ -39,7 +39,14 @@ class PublicGamesTest extends TestCase
     {
         $this->get('/code/ABCD1234')
             ->assertOk()
-            ->assertSee('miseryindex:///code/ABCD1234', false);
+            ->assertSee('miseryindex:///code/ABCD1234', false)
+            ->assertSee('Join my Misery Meter room', false)
+            ->assertSee(url('/favicon.ico'), false)
+            ->assertSee(url('/misery-og.png'), false);
+
+        $this->get('/favicon.ico')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/png');
     }
 
     public function test_native_public_games_never_include_started_games(): void

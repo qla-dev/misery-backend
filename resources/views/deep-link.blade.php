@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
     <title>Join Misery Meter room</title>
+    <link rel="icon" href="{{ url('/favicon.ico') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ url('/favicon.ico') }}">
+    <meta name="description" content="Join room {{ $code }} in Misery Meter.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Misery Meter">
+    <meta property="og:title" content="Join my Misery Meter room">
+    <meta property="og:description" content="Open Misery Meter and join room {{ $code }}.">
+    <meta property="og:url" content="{{ request()->fullUrl() }}">
+    <meta property="og:image" content="{{ url('/misery-og.png') }}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Misery Meter">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Join my Misery Meter room">
+    <meta name="twitter:description" content="Open Misery Meter and join room {{ $code }}.">
+    <meta name="twitter:image" content="{{ url('/misery-og.png') }}">
     <style>
         body { align-items: center; background: #0a0a0a; color: #f5f5f5; display: flex; font-family: system-ui, sans-serif; justify-content: center; margin: 0; min-height: 100vh; padding: 24px; text-align: center; }
         main { max-width: 420px; width: 100%; }

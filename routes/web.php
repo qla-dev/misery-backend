@@ -30,6 +30,15 @@ Route::get('/.well-known/assetlinks.json', function () {
         ],
     ]])->header('Content-Type', 'application/json');
 });
+Route::get('/favicon.ico', function () {
+    $path = base_path('../frontend/assets/images/favicon.png');
+    abort_unless(is_file($path), 404);
+
+    return response()->file($path, [
+        'Cache-Control' => 'public, max-age=604800',
+        'Content-Type' => 'image/png',
+    ]);
+});
 Route::get('/code/{code}', function (string $code) {
     $code = strtoupper($code);
     abort_unless((bool) preg_match('/^(?=(?:.*[A-Z]){4})(?=(?:.*\d){4})[A-Z\d]{8}$/', $code), 404);
