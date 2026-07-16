@@ -113,7 +113,7 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
         return response()->file(resource_path('ai/main-silhouette.svg'), ['Content-Type' => 'image/svg+xml']);
     })->name('content.silhouette');
     Route::get('content-logo-letter', function () {
-        return response()->file(base_path('../frontend/assets/images/i-letter.svg'), ['Content-Type' => 'image/svg+xml']);
+        return response()->file(resource_path('ai/i-letter.png'), ['Content-Type' => 'image/png']);
     })->name('content.logo-letter');
     Route::get('content-assets/{filename}', function (string $filename) {
         abort_if(str_contains($filename, '/') || str_contains($filename, '..'), 404);

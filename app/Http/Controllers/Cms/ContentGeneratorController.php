@@ -122,9 +122,9 @@ class ContentGeneratorController extends Controller
         ]);
 
         try {
-            $reference = file_get_contents(resource_path('ai/main-silhouette.svg'));
+            $reference = file_get_contents(resource_path('ai/main-silhouette.png'));
             $result = $generator->generate($prompt, [[
-                'mime_type' => 'image/svg+xml',
+                'mime_type' => 'image/png',
                 'data' => $reference === false ? '' : $reference,
                 'label' => 'Required silhouette style reference. Preserve the anonymous white person and yellow accent language, but create the requested new pose.',
             ]]);

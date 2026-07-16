@@ -7,6 +7,17 @@ use RuntimeException;
 
 class GeminiImageGenerator
 {
+    private const SUPPORTED_IMAGE_TYPES = [
+        'image/png',
+        'image/jpeg',
+        'image/webp',
+        'image/heic',
+        'image/heif',
+        'image/gif',
+        'image/bmp',
+        'image/tiff',
+    ];
+
     /**
      * @param  array<int, array{mime_type:string,data:string,label?:string}>  $references
      * @return array{data:string,mime_type:string}
@@ -24,6 +35,13 @@ class GeminiImageGenerator
 
         $content = [['type' => 'text', 'text' => implode("\n\n", $promptSections)]];
         foreach ($references as $reference) {
+            throw_unless(
+                in_array($reference['mime_type'], self::SUPPORTED_IMAGE_TYPES, true),
+                RuntimeException::class,
+                'Unsupported Gemini reference image type: '.$reference['mime_type'].'. Convert it to PNG, JPEG, or WebP first.'
+            );
+            throw_if($reference['data'] === '', RuntimeException::class, 'Gemini reference image is empty.');
+
             $content[] = [
                 'type' => 'image',
                 'mime_type' => $reference['mime_type'],

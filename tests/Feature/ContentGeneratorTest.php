@@ -28,6 +28,10 @@ class ContentGeneratorTest extends TestCase
         $this->withServerVariables($this->cmsServer())->get('/cms/content-silhouette')
             ->assertOk()
             ->assertHeader('Content-Type', 'image/svg+xml');
+
+        $this->withServerVariables($this->cmsServer())->get('/cms/content-logo-letter')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/png');
     }
 
     public function test_content_studio_generates_editable_social_copy_with_gemini(): void
@@ -112,6 +116,8 @@ class ContentGeneratorTest extends TestCase
         $this->assertCount(2, Storage::disk('public')->files('content/silhouettes'));
         Http::assertSent(fn ($request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/interactions'
             && $request['input'][0]['type'] === 'user_input'
-            && str_contains($request['input'][0]['content'][0]['text'], 'standalone editorial silhouette'));
+            && str_contains($request['input'][0]['content'][0]['text'], 'standalone editorial silhouette')
+            && collect($request['input'][0]['content'])->where('type', 'image')->where('mime_type', 'image/png')->isNotEmpty()
+            && collect($request['input'][0]['content'])->where('mime_type', 'image/svg+xml')->isEmpty());
     }
 }
