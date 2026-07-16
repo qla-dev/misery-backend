@@ -111,6 +111,7 @@ class ContentGeneratorTest extends TestCase
 
         $this->assertCount(2, Storage::disk('public')->files('content/silhouettes'));
         Http::assertSent(fn ($request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/interactions'
-            && str_contains($request['input'][0]['text'], 'standalone editorial silhouette'));
+            && $request['input'][0]['type'] === 'user_input'
+            && str_contains($request['input'][0]['content'][0]['text'], 'standalone editorial silhouette'));
     }
 }

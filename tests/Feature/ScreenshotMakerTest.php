@@ -76,15 +76,18 @@ class ScreenshotMakerTest extends TestCase
         [$width, $height] = getimagesizefromstring(Storage::disk('public')->get($files[0]));
         $this->assertSame([1290, 2796], [$width, $height]);
         Http::assertSent(function ($request) {
-            $input = $request['input'];
+            $input = $request['input'][0];
+            $content = $input['content'];
 
             return $request->url() === 'https://generativelanguage.googleapis.com/v1/interactions'
                 && $request['model'] === 'gemini-image-test'
                 && $request['response_format']['type'] === 'image'
                 && $request['response_format']['aspect_ratio'] === '9:16'
-                && str_contains($input[0]['text'], 'Misery-yellow (#FACC15) rainbow')
-                && collect($input)->where('type', 'image')->where('mime_type', 'image/jpeg')->isNotEmpty()
-                && collect($input)->where('type', 'image')->where('mime_type', 'image/png')->isNotEmpty();
+                && $input['type'] === 'user_input'
+                && str_contains($content[0]['text'], 'Misery-yellow (#FACC15) rainbow')
+                && collect($content)->where('type', 'text')->count() === 1
+                && collect($content)->where('type', 'image')->where('mime_type', 'image/jpeg')->isNotEmpty()
+                && collect($content)->where('type', 'image')->where('mime_type', 'image/png')->isNotEmpty();
         });
         $this->assertStringContainsString('generated/', $response->json('url'));
     }

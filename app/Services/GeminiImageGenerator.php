@@ -16,19 +16,20 @@ class GeminiImageGenerator
         $key = (string) config('services.gemini_fallback.key');
         throw_if($key === '', RuntimeException::class, 'FALLBACK_GEMINI_API_KEY or GEMINI_API_KEY is not configured.');
 
-        $input = [['type' => 'text', 'text' => $prompt]];
+        $promptSections = [$prompt];
         foreach ($references as $index => $reference) {
-            $input[] = [
-                'type' => 'text',
-                'text' => $reference['label'] ?? 'Visual reference '.($index + 1).'. Use its design principles without copying its text, logo, or app identity.',
-            ];
-            $input[] = [
+            $promptSections[] = 'Reference image '.($index + 1).': '.($reference['label'] ?? 'Use its design principles without copying its text, logo, or app identity.');
+        }
+        $promptSections[] = 'The reference images follow in the same numbered order. Return only the finished image. Do not return explanatory text.';
+
+        $content = [['type' => 'text', 'text' => implode("\n\n", $promptSections)]];
+        foreach ($references as $reference) {
+            $content[] = [
                 'type' => 'image',
                 'mime_type' => $reference['mime_type'],
                 'data' => base64_encode($reference['data']),
             ];
         }
-        $input[] = ['type' => 'text', 'text' => 'Return only the finished image. Do not return explanatory text.'];
 
         $model = (string) config('services.gemini_fallback.image_model');
         $response = Http::withHeaders(['x-goog-api-key' => $key])
@@ -37,7 +38,10 @@ class GeminiImageGenerator
             ->timeout(180)
             ->post(rtrim((string) config('services.gemini_fallback.base_url'), '/').'/interactions', [
                 'model' => $model,
-                'input' => $input,
+                'input' => [[
+                    'type' => 'user_input',
+                    'content' => $content,
+                ]],
                 'response_format' => [
                     'type' => 'image',
                     'mime_type' => 'image/jpeg',
