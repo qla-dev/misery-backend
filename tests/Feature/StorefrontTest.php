@@ -42,6 +42,10 @@ class StorefrontTest extends TestCase
         $this->get('/simulator')->assertUnauthorized()->assertHeader('WWW-Authenticate');
         $this->get('/simulator/realtime-status')->assertUnauthorized()->assertHeader('WWW-Authenticate');
         $this->get('/simulator/rooms')->assertUnauthorized()->assertHeader('WWW-Authenticate');
+        $user = User::factory()->create();
+        $game = Game::create(['code' => 'SPEC1001', 'owner_id' => $user->id]);
+        $game->members()->attach($user);
+        $this->get("/simulator/rooms/{$game->id}")->assertUnauthorized()->assertHeader('WWW-Authenticate');
 
         $this->withServerVariables([
             'PHP_AUTH_USER' => config('cms.username'),
@@ -51,6 +55,9 @@ class StorefrontTest extends TestCase
             ->assertSee('Create game')
             ->assertSee('Game chat')
             ->assertSee('Leave room')
+            ->assertSee('Spectator')
+            ->assertSee('openSpectator', false)
+            ->assertSee('Game finished', false)
             ->assertSee('Live transport state')
             ->assertSee('cdn.ably.com/lib/ably.min-2.js', false)
             ->assertSee('connectPusherProtocol', false)
@@ -86,5 +93,31 @@ class StorefrontTest extends TestCase
             ->assertOk()
             ->assertJsonFragment(['code' => 'PUSH1001', 'started' => true, 'sync_driver' => 'pusher'])
             ->assertJsonFragment(['code' => 'POLL1001', 'started' => false, 'sync_driver' => 'polling']);
+    }
+
+    public function test_admin_spectator_snapshot_is_read_only_and_exposes_finished_state(): void
+    {
+        $winner = User::factory()->create();
+        $game = Game::create([
+            'code' => 'DONE1001',
+            'owner_id' => $winner->id,
+            'started' => true,
+            'winner_id' => $winner->id,
+            'sync_driver' => 'polling',
+        ]);
+        $game->members()->attach($winner, ['updated_at' => now()->subMinute()]);
+        $memberUpdatedAt = $game->members()->firstOrFail()->pivot->updated_at->toISOString();
+
+        $this->withServerVariables([
+            'PHP_AUTH_USER' => config('cms.username'),
+            'PHP_AUTH_PW' => config('cms.password'),
+        ])->getJson("/simulator/rooms/{$game->id}")
+            ->assertOk()
+            ->assertJsonPath('data.code', 'DONE1001')
+            ->assertJsonPath('data.winner_id', $winner->id)
+            ->assertJsonCount(1, 'data.members');
+
+        $this->assertSame(1, $game->members()->count());
+        $this->assertSame($memberUpdatedAt, $game->members()->firstOrFail()->pivot->updated_at->toISOString());
     }
 }

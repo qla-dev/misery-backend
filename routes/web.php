@@ -84,6 +84,13 @@ Route::get('/simulator/realtime-status', fn (RealtimeTransportAllocator $allocat
 Route::get('/simulator/rooms', fn () => GameResource::collection(
     Game::query()->whereNull('terminated_at')->with('members')->latest()->get()
 ))->middleware('cms.auth')->name('simulator.rooms');
+Route::get('/simulator/rooms/{game}', fn (Game $game) => new GameResource($game->load([
+    'members',
+    'currentCard',
+    'stack',
+    'moves' => fn ($query) => $query->with(['player', 'card'])->latest(),
+    'messages' => fn ($query) => $query->with('user')->latest()->limit(100),
+])))->middleware('cms.auth')->name('simulator.rooms.show');
 Route::get('/card-images/{path}', function (string $path) {
     abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
     abort_unless(Storage::disk('public')->exists($path), 404);
