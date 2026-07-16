@@ -2,9 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\GameUpdated;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\GameResource;
 use App\Http\Resources\GameMessageResource;
+use App\Http\Resources\GameResource;
 use App\Http\Resources\MoveResource;
 use App\Http\Resources\UserResource;
 use App\Models\Card;
@@ -13,13 +14,17 @@ use App\Models\GameMessage;
 use App\Models\Move;
 use App\Models\Stack;
 use App\Models\User;
+use App\Services\RealtimeTransportAllocator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class GameController extends Controller
 {
     private const COLORS = ['yellow', 'blue', 'emerald', 'purple', 'rose', 'orange', 'brown', 'silver'];
+
+    public function __construct(private readonly RealtimeTransportAllocator $transportAllocator) {}
 
     private function full(Game $game): GameResource
     {
@@ -29,6 +34,30 @@ class GameController extends Controller
             'moves' => fn ($q) => $q->with(['player', 'card'])->latest(),
             'messages' => fn ($q) => $q->with('user')->latest()->limit(100),
         ]));
+    }
+
+    private function broadcastGameUpdated(Game|int $game, string $reason, ?string $driverOverride = null): void
+    {
+        $gameId = $game instanceof Game ? (int) $game->id : $game;
+        $driver = config('game.reverb_override')
+            ? 'reverb'
+            : ($driverOverride ?? ($game instanceof Game ? $game->sync_driver : 'polling'));
+        if (! in_array($driver, ['pusher', 'ably', 'reverb'], true)) {
+            return;
+        }
+
+        DB::afterCommit(function () use ($gameId, $reason, $driver) {
+            try {
+                GameUpdated::dispatch($gameId, $reason, $driver);
+            } catch (\Throwable $error) {
+                Log::error('Realtime game update failed', [
+                    'game_id' => $gameId,
+                    'driver' => $driver,
+                    'reason' => $reason,
+                    'message' => $error->getMessage(),
+                ]);
+            }
+        });
     }
 
     private function memberIds(Game $game): array
@@ -49,7 +78,9 @@ class GameController extends Controller
         $count = count($originalMemberIds);
         for ($offset = 1; $offset <= $count; $offset++) {
             $candidate = $originalMemberIds[(($currentIndex === false ? -1 : $currentIndex) + $offset) % $count];
-            if (in_array($candidate, $remainingMemberIds, true)) return $candidate;
+            if (in_array($candidate, $remainingMemberIds, true)) {
+                return $candidate;
+            }
         }
 
         return $remainingMemberIds[0];
@@ -76,6 +107,7 @@ class GameController extends Controller
         $remaining = $this->memberIds($game);
         if (! $remaining) {
             $game->update(['current_player_id' => null, 'turn_owner_id' => null, 'awaiting_finish' => false, 'is_steal_turn' => false]);
+
             return;
         }
 
@@ -83,11 +115,15 @@ class GameController extends Controller
         $ownerId = (int) $game->turn_owner_id;
         $currentRemoved = in_array($currentId, $removedMemberIds, true);
         $ownerRemoved = in_array($ownerId, $removedMemberIds, true);
-        if (! $currentRemoved && ! $ownerRemoved) return;
+        if (! $currentRemoved && ! $ownerRemoved) {
+            return;
+        }
 
         if ($ownerRemoved || ! $game->is_steal_turn) {
             $nextOwnerId = $this->nextRemainingMemberId($originalMemberIds, $remaining, $ownerId ?: $currentId);
-            if ($game->started) $this->drawNextCard($game);
+            if ($game->started) {
+                $this->drawNextCard($game);
+            }
             $game->current_player_id = $nextOwnerId;
             $game->turn_owner_id = $nextOwnerId;
             $game->is_steal_turn = false;
@@ -95,7 +131,9 @@ class GameController extends Controller
             $nextActorId = $this->nextRemainingMemberId($originalMemberIds, $remaining, $currentId);
             if ($nextActorId === $ownerId) {
                 $nextOwnerId = $this->nextRemainingMemberId($originalMemberIds, $remaining, $ownerId);
-                if ($game->started) $this->drawNextCard($game);
+                if ($game->started) {
+                    $this->drawNextCard($game);
+                }
                 $game->current_player_id = $nextOwnerId;
                 $game->turn_owner_id = $nextOwnerId;
                 $game->is_steal_turn = false;
@@ -110,9 +148,30 @@ class GameController extends Controller
 
     private function refreshPresence(Game $game, int $requestingUserId): Game
     {
+        if ($game->terminated_at) {
+            return $game;
+        }
+
+        $cutoff = now()->subSeconds(config('game.member_inactivity_timeout_seconds'));
+        $hasInactiveMembers = DB::table('members')
+            ->where('game_id', $game->id)
+            ->where('updated_at', '<', $cutoff)
+            ->exists();
+
+        if (! $hasInactiveMembers) {
+            DB::table('members')
+                ->where('game_id', $game->id)
+                ->where('user_id', $requestingUserId)
+                ->update(['updated_at' => now()]);
+
+            return $game->refresh();
+        }
+
         return DB::transaction(function () use ($game, $requestingUserId) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
-            if ($game->terminated_at) return $game;
+            if ($game->terminated_at) {
+                return $game;
+            }
 
             $originalMemberIds = $this->memberIds($game);
             $cutoff = now()->subSeconds(config('game.member_inactivity_timeout_seconds'));
@@ -123,6 +182,7 @@ class GameController extends Controller
 
             if (in_array((int) $game->owner_id, $inactiveIds, true)) {
                 $this->terminateGame($game, 'host_inactive');
+
                 return $game->refresh();
             }
 
@@ -198,33 +258,73 @@ class GameController extends Controller
         ]);
         $stack = Stack::where('slug', $data['stack'] ?? 'normal')->firstOrFail();
 
-        return DB::transaction(function () use ($data, $stack) {
-            $user = User::create([
-                'name' => $data['name'],
-                'email' => $data['email'] ?? null,
-                'color' => $data['color'] ?? self::COLORS[0],
-            ]);
-            do {
-                $letters = '';
-                for ($i = 0; $i < 4; $i++) {
-                    $letters .= chr(random_int(65, 90));
-                }
-                $chars = str_split($letters.random_int(1000, 9999));
-                shuffle($chars);
-                $code = implode($chars);
-            } while (Game::whereCode($code)->exists());
-            $game = Game::create(['code' => $code, 'owner_id' => $user->id, 'stack_id' => $stack->id]);
-            $game->members()->attach($user);
+        return Cache::lock('realtime-transport-allocation', 15)->block(10, function () use ($data, $stack) {
+            $syncDriver = $this->transportAllocator->selectForNewRoom();
 
-            return response()->json(['game' => $this->full($game), 'user' => new UserResource($user)], 201);
+            return DB::transaction(function () use ($data, $stack, $syncDriver) {
+                $user = User::create([
+                    'name' => $data['name'],
+                    'email' => $data['email'] ?? null,
+                    'color' => $data['color'] ?? self::COLORS[0],
+                ]);
+                do {
+                    $letters = '';
+                    for ($i = 0; $i < 4; $i++) {
+                        $letters .= chr(random_int(65, 90));
+                    }
+                    $chars = str_split($letters.random_int(1000, 9999));
+                    shuffle($chars);
+                    $code = implode($chars);
+                } while (Game::whereCode($code)->exists());
+                $game = Game::create(['code' => $code, 'owner_id' => $user->id, 'stack_id' => $stack->id, 'sync_driver' => $syncDriver]);
+                $game->members()->attach($user);
+
+                return response()->json(['game' => $this->full($game), 'user' => new UserResource($user)], 201);
+            });
         });
     }
 
     public function show(Request $request, Game $game)
     {
         $data = $request->validate(['user_id' => 'nullable|integer']);
-        if (isset($data['user_id'])) $game = $this->refreshPresence($game, (int) $data['user_id']);
+        if (isset($data['user_id'])) {
+            $game = $this->refreshPresence($game, (int) $data['user_id']);
+        }
+
         return $this->full($game);
+    }
+
+    public function snapshot(Game $game)
+    {
+        return $this->full($game);
+    }
+
+    public function heartbeat(Request $request, Game $game)
+    {
+        $data = $request->validate(['user_id' => 'required|integer']);
+        $beforeMembers = $this->memberIds($game);
+        $wasTerminated = (bool) $game->terminated_at;
+        $game = $this->refreshPresence($game, (int) $data['user_id']);
+        $presenceChanged = $beforeMembers !== $this->memberIds($game)
+            || $wasTerminated !== (bool) $game->terminated_at;
+        if ($presenceChanged) {
+            $this->broadcastGameUpdated($game, 'presence.changed');
+        }
+
+        return response()->noContent();
+    }
+
+    public function realtimeToken(Request $request, Game $game)
+    {
+        $data = $request->validate(['user_id' => 'required|integer']);
+        abort_unless($game->sync_driver === 'ably', 409, 'This room does not use Ably.');
+        abort_unless(
+            DB::table('members')->where('game_id', $game->id)->where('user_id', $data['user_id'])->exists(),
+            403,
+            'Only room members can connect.'
+        );
+
+        return response()->json($this->transportAllocator->createAblyTokenRequest($game, (int) $data['user_id']));
     }
 
     public function sendMessage(Request $request, Game $game)
@@ -248,6 +348,7 @@ class GameController extends Controller
             'user_id' => $data['user_id'],
             'message' => $data['message'],
         ]);
+        $this->broadcastGameUpdated($game, 'message.created');
 
         return (new GameMessageResource($message->load('user')))->response()->setStatusCode(201);
     }
@@ -262,6 +363,7 @@ class GameController extends Controller
         $data = $request->validate(['user_id' => 'required|integer', 'present' => 'required|boolean']);
         abort_unless((int) $game->owner_id === (int) $data['user_id'], 403, 'Only the room owner can update host presence.');
         $game->update(['host_in_lobby' => $data['present']]);
+        $this->broadcastGameUpdated($game, 'host.presence');
 
         return $this->full($game);
     }
@@ -279,6 +381,7 @@ class GameController extends Controller
         abort_unless($game->is_private || $data['pro_active'], 403, 'An active Misery PRO subscription is required to create a private room.');
 
         $game->update(['is_private' => ! $game->is_private]);
+        $this->broadcastGameUpdated($game, 'room.locked');
 
         return $this->full($game->refresh());
     }
@@ -309,6 +412,7 @@ class GameController extends Controller
                 'host_id' => (int) $data['user_id'],
                 'player_id' => (int) $data['player_id'],
             ]);
+            $this->broadcastGameUpdated($game, 'member.kicked');
 
             return $this->full($game->refresh());
         });
@@ -317,13 +421,17 @@ class GameController extends Controller
     public function update(Request $request, Game $game)
     {
         $game->update($request->validate(['started' => 'sometimes|boolean']));
+        $this->broadcastGameUpdated($game, 'game.updated');
 
         return $this->full($game);
     }
 
     public function destroy(Game $game)
     {
+        $gameId = (int) $game->id;
+        $driver = $game->sync_driver;
         $game->delete();
+        $this->broadcastGameUpdated($gameId, 'game.deleted', $driver);
 
         return response()->noContent();
     }
@@ -331,19 +439,31 @@ class GameController extends Controller
     public function join(Request $request, string $code)
     {
         $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'nullable|email', 'color' => 'nullable|in:'.implode(',', self::COLORS)]);
+        if (! config('game.reverb_override')) {
+            $this->transportAllocator->providerAvailable('pusher');
+            $this->transportAllocator->providerAvailable('ably');
+        }
 
-        return DB::transaction(function () use ($data, $code) {
-            $game = Game::where('code', strtoupper($code))->lockForUpdate()->firstOrFail();
-            $this->ensurePlayable($game);
-            abort_if($game->started, 422, 'Game already started.');
-            abort_if($game->members()->count() >= config('game.max_players'), 422, 'No more available seats in this room.');
-            $used = $game->members()->pluck('color')->filter()->all();
-            $requested = $data['color'] ?? self::COLORS[0];
-            $data['color'] = in_array($requested, $used, true) ? collect(self::COLORS)->first(fn ($color) => ! in_array($color, $used, true)) : $requested;
-            $user = User::create($data);
-            $game->members()->attach($user);
+        return Cache::lock('realtime-transport-allocation', 15)->block(10, function () use ($data, $code) {
+            return DB::transaction(function () use ($data, $code) {
+                $game = Game::where('code', strtoupper($code))->lockForUpdate()->firstOrFail();
+                $this->ensurePlayable($game);
+                abort_if($game->started, 422, 'Game already started.');
+                abort_if($game->members()->count() >= config('game.max_players'), 422, 'No more available seats in this room.');
+                $previousDriver = $game->sync_driver;
+                $this->transportAllocator->ensureCapacityForJoin($game);
+                if ($game->sync_driver !== $previousDriver) {
+                    $this->broadcastGameUpdated($game, 'transport.changed', $previousDriver);
+                }
+                $used = $game->members()->pluck('color')->filter()->all();
+                $requested = $data['color'] ?? self::COLORS[0];
+                $data['color'] = in_array($requested, $used, true) ? collect(self::COLORS)->first(fn ($color) => ! in_array($color, $used, true)) : $requested;
+                $user = User::create($data);
+                $game->members()->attach($user);
+                $this->broadcastGameUpdated($game, 'member.joined');
 
-            return response()->json(['game' => $this->full($game), 'user' => new UserResource($user), 'color_changed' => $requested !== $data['color']], 201);
+                return response()->json(['game' => $this->full($game), 'user' => new UserResource($user), 'color_changed' => $requested !== $data['color']], 201);
+            });
         });
     }
 
@@ -352,7 +472,7 @@ class GameController extends Controller
         $this->ensurePlayable($game);
         $data = $request->validate(['user_id' => 'required|integer', 'stack' => 'sometimes|string|exists:stacks,slug', 'target_score' => 'required|integer|min:1|max:50']);
         $userId = (int) $data['user_id'];
-        $stack = \App\Models\Stack::where('slug', $data['stack'] ?? 'normal')->firstOrFail();
+        $stack = Stack::where('slug', $data['stack'] ?? 'normal')->firstOrFail();
 
         Log::info('Game start requested', [
             'game_id' => $game->id,
@@ -386,7 +506,9 @@ class GameController extends Controller
                     'is_steal_turn' => false,
                 ]);
             }
-            if (! $game->started) $game->update(['stack_id' => $stack->id, 'target_score' => $data['target_score'], 'winner_id' => null]);
+            if (! $game->started) {
+                $game->update(['stack_id' => $stack->id, 'target_score' => $data['target_score'], 'winner_id' => null]);
+            }
             $game->load('members');
             $memberCount = $game->members->count();
 
@@ -427,6 +549,7 @@ class GameController extends Controller
                     'current_card_id' => $current->id,
                 ]);
             }
+            $this->broadcastGameUpdated($game, 'game.started');
 
             return $this->full($game);
         });
@@ -465,6 +588,7 @@ class GameController extends Controller
                 // once every eligible player has attempted the card.
                 $this->advanceStealOrRound($game, false);
             }
+            $this->broadcastGameUpdated($game, 'move.created');
 
             return response()->json(['move' => new MoveResource($move->load(['player', 'card'])), 'game' => $this->full($game)]);
         });
@@ -482,6 +606,7 @@ class GameController extends Controller
             abort_unless($game->awaiting_finish, 409, 'There is no completed turn to finish.');
             $move = Move::where('game_id', $game->id)->latest()->firstOrFail();
             $this->advanceStealOrRound($game, (bool) $move->correct);
+            $this->broadcastGameUpdated($game, 'turn.finished');
 
             return response()->json(['game' => $this->full($game)]);
         });
@@ -498,6 +623,7 @@ class GameController extends Controller
             abort_unless($game->is_steal_turn && ! $game->awaiting_finish, 409, 'There is no steal to pass.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'Only the active stealer can pass.');
             $this->advanceStealOrRound($game, false);
+            $this->broadcastGameUpdated($game, 'steal.passed');
 
             return response()->json(['game' => $this->full($game)]);
         });
@@ -510,7 +636,9 @@ class GameController extends Controller
 
         return DB::transaction(function () use ($game, $userId) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
-            if ($game->terminated_at) return $this->full($game);
+            if ($game->terminated_at) {
+                return $this->full($game);
+            }
 
             $originalMemberIds = $this->memberIds($game);
             abort_unless(in_array($userId, $originalMemberIds, true), 404, 'Player is not in this room.');
@@ -522,6 +650,7 @@ class GameController extends Controller
                 $this->normalizeAfterMembersRemoved($game, $originalMemberIds, [$userId]);
                 Log::info('Inactive game member removed after turn timeout', ['game_id' => $game->id, 'user_id' => $userId]);
             }
+            $this->broadcastGameUpdated($game, 'member.inactive');
 
             return $this->full($game->refresh());
         });
@@ -534,7 +663,9 @@ class GameController extends Controller
 
         return DB::transaction(function () use ($game, $userId) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
-            if ($game->terminated_at) return $this->full($game);
+            if ($game->terminated_at) {
+                return $this->full($game);
+            }
             $originalMemberIds = $this->memberIds($game);
             abort_unless(in_array($userId, $originalMemberIds, true), 404, 'Player is not in this room.');
 
@@ -545,6 +676,7 @@ class GameController extends Controller
                 $this->normalizeAfterMembersRemoved($game, $originalMemberIds, [$userId]);
                 Log::info('Player left game', ['game_id' => $game->id, 'user_id' => $userId]);
             }
+            $this->broadcastGameUpdated($game, 'member.left');
 
             return $this->full($game->refresh());
         });

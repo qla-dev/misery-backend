@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Game;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -38,6 +40,8 @@ class StorefrontTest extends TestCase
     public function test_simulator_requires_the_same_basic_auth_as_cms(): void
     {
         $this->get('/simulator')->assertUnauthorized()->assertHeader('WWW-Authenticate');
+        $this->get('/simulator/realtime-status')->assertUnauthorized()->assertHeader('WWW-Authenticate');
+        $this->get('/simulator/rooms')->assertUnauthorized()->assertHeader('WWW-Authenticate');
 
         $this->withServerVariables([
             'PHP_AUTH_USER' => config('cms.username'),
@@ -47,6 +51,40 @@ class StorefrontTest extends TestCase
             ->assertSee('Create game')
             ->assertSee('Game chat')
             ->assertSee('Leave room')
+            ->assertSee('Live transport state')
+            ->assertSee('cdn.ably.com/lib/ably.min-2.js', false)
+            ->assertSee('connectPusherProtocol', false)
             ->assertSee("'/messages'", false);
+    }
+
+    public function test_simulator_reports_live_transport_allocation_and_all_rooms(): void
+    {
+        config([
+            'game.pusher_connection_capacity' => 100,
+            'game.ably_connection_capacity' => 200,
+        ]);
+        $pusherPlayer = User::factory()->create();
+        $pollingPlayer = User::factory()->create();
+        $pusherGame = Game::create(['code' => 'PUSH1001', 'owner_id' => $pusherPlayer->id, 'started' => true, 'sync_driver' => 'pusher']);
+        $pollingGame = Game::create(['code' => 'POLL1001', 'owner_id' => $pollingPlayer->id, 'sync_driver' => 'polling']);
+        $pusherGame->members()->attach($pusherPlayer, ['updated_at' => now()]);
+        $pollingGame->members()->attach($pollingPlayer, ['updated_at' => now()]);
+
+        $auth = $this->withServerVariables([
+            'PHP_AUTH_USER' => config('cms.username'),
+            'PHP_AUTH_PW' => config('cms.password'),
+        ]);
+
+        $auth->getJson('/simulator/realtime-status')
+            ->assertOk()
+            ->assertJsonPath('providers.pusher.active_players', 1)
+            ->assertJsonPath('providers.pusher.limit', 100)
+            ->assertJsonPath('providers.polling.active_players', 1)
+            ->assertJsonPath('providers.polling.limit', null);
+
+        $auth->getJson('/simulator/rooms')
+            ->assertOk()
+            ->assertJsonFragment(['code' => 'PUSH1001', 'started' => true, 'sync_driver' => 'pusher'])
+            ->assertJsonFragment(['code' => 'POLL1001', 'started' => false, 'sync_driver' => 'polling']);
     }
 }

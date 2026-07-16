@@ -41,4 +41,7 @@ Route::post('games/{game}/finish-turn', [GameController::class, 'finishTurn']);
 Route::post('games/{game}/pass-steal', [GameController::class, 'passSteal']);
 Route::post('games/{game}/inactivity-timeout', [GameController::class, 'inactivityTimeout']);
 Route::post('games/{game}/leave', [GameController::class, 'leave']);
+Route::get('games/{game}/snapshot', [GameController::class, 'snapshot']);
+Route::post('games/{game}/heartbeat', [GameController::class, 'heartbeat']);
+Route::get('games/{game}/realtime-token', [GameController::class, 'realtimeToken']);
 Route::options('{path}', fn () => response()->noContent())->where('path', '.*');

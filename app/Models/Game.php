@@ -1,3 +1,47 @@
 <?php
-namespace App\Models; use Illuminate\Database\Eloquent\Model;
-class Game extends Model { protected $fillable=['code','owner_id','started','host_in_lobby','is_private','terminated_at','termination_reason','current_card_id','stack_id','target_score','current_player_id','turn_owner_id','winner_id','awaiting_finish','is_steal_turn']; protected $casts=['started'=>'boolean','host_in_lobby'=>'boolean','is_private'=>'boolean','terminated_at'=>'datetime','awaiting_finish'=>'boolean','is_steal_turn'=>'boolean','target_score'=>'integer']; public function owner(){return $this->belongsTo(User::class,'owner_id');} public function members(){return $this->belongsToMany(User::class,'members')->withTimestamps();} public function moves(){return $this->hasMany(Move::class);} public function messages(){return $this->hasMany(GameMessage::class);} public function currentCard(){return $this->belongsTo(Card::class,'current_card_id');} public function currentPlayer(){return $this->belongsTo(User::class,'current_player_id');} public function stack(){return $this->belongsTo(Stack::class);} }
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Game extends Model
+{
+    protected $fillable = ['code', 'owner_id', 'started', 'host_in_lobby', 'is_private', 'terminated_at', 'termination_reason', 'current_card_id', 'stack_id', 'target_score', 'current_player_id', 'turn_owner_id', 'winner_id', 'awaiting_finish', 'is_steal_turn', 'sync_driver'];
+
+    protected $casts = ['started' => 'boolean', 'host_in_lobby' => 'boolean', 'is_private' => 'boolean', 'terminated_at' => 'datetime', 'awaiting_finish' => 'boolean', 'is_steal_turn' => 'boolean', 'target_score' => 'integer'];
+
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    public function members()
+    {
+        return $this->belongsToMany(User::class, 'members')->withTimestamps();
+    }
+
+    public function moves()
+    {
+        return $this->hasMany(Move::class);
+    }
+
+    public function messages()
+    {
+        return $this->hasMany(GameMessage::class);
+    }
+
+    public function currentCard()
+    {
+        return $this->belongsTo(Card::class, 'current_card_id');
+    }
+
+    public function currentPlayer()
+    {
+        return $this->belongsTo(User::class, 'current_player_id');
+    }
+
+    public function stack()
+    {
+        return $this->belongsTo(Stack::class);
+    }
+}

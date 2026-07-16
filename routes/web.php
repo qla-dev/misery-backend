@@ -5,7 +5,10 @@ use App\Http\Controllers\Cms\CardGeneratorController as CmsCardGeneratorControll
 use App\Http\Controllers\Cms\ContentGeneratorController as CmsContentGeneratorController;
 use App\Http\Controllers\Cms\ScreenshotMakerController as CmsScreenshotMakerController;
 use App\Http\Controllers\Cms\StackController as CmsStackController;
+use App\Http\Resources\GameResource;
+use App\Models\Game;
 use App\Models\Stack;
+use App\Services\RealtimeTransportAllocator;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
@@ -75,6 +78,12 @@ Route::get('/misery-og.png', function () {
 Route::get('/simulator', fn () => view('play', [
     'stacks' => Stack::query()->orderBy('name')->get(['name', 'slug']),
 ]))->middleware('cms.auth')->name('simulator');
+Route::get('/simulator/realtime-status', fn (RealtimeTransportAllocator $allocator) => response()->json($allocator->status()))
+    ->middleware('cms.auth')
+    ->name('simulator.realtime-status');
+Route::get('/simulator/rooms', fn () => GameResource::collection(
+    Game::query()->whereNull('terminated_at')->with('members')->latest()->get()
+))->middleware('cms.auth')->name('simulator.rooms');
 Route::get('/card-images/{path}', function (string $path) {
     abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
     abort_unless(Storage::disk('public')->exists($path), 404);
