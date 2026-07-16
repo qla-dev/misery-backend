@@ -108,6 +108,28 @@ class GameSyncTransportTest extends TestCase
         $this->assertSame('ably', $allocator->selectForNewRoom());
     }
 
+    public function test_pusher_probe_client_is_constructed_with_supported_options(): void
+    {
+        config([
+            'broadcasting.connections.pusher.app_id' => 'app-id',
+            'broadcasting.connections.pusher.key' => 'app-key',
+            'broadcasting.connections.pusher.secret' => 'app-secret',
+            'broadcasting.connections.pusher.options' => [
+                'cluster' => 'us2',
+                'host' => 'api-us2.pusher.com',
+                'port' => 443,
+                'scheme' => 'https',
+                'useTLS' => true,
+            ],
+            'game.provider_probe_timeout_ms' => 2500,
+        ]);
+
+        $method = new \ReflectionMethod(RealtimeTransportAllocator::class, 'pusher');
+        $client = $method->invoke(app(RealtimeTransportAllocator::class));
+
+        $this->assertInstanceOf(\Pusher\Pusher::class, $client);
+    }
+
     public function test_reverb_override_bypasses_hosted_providers_and_polling(): void
     {
         Event::fake([GameUpdated::class]);

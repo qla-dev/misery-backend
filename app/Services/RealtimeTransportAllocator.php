@@ -249,9 +249,9 @@ class RealtimeTransportAllocator
     {
         $config = config('broadcasting.connections.pusher');
 
-        return new Pusher($config['key'], $config['secret'], $config['app_id'], $config['options'], [
+        return new Pusher($config['key'], $config['secret'], $config['app_id'], [
+            ...$config['options'],
             'timeout' => config('game.provider_probe_timeout_ms') / 1000,
-            'connect_timeout' => config('game.provider_probe_timeout_ms') / 1000,
         ]);
     }
 
