@@ -34,9 +34,10 @@ class ScreenshotMakerTest extends TestCase
     {
         Storage::fake('public');
         config([
-            'services.gemini_fallback.key' => 'screenshot-test-key',
-            'services.gemini_fallback.base_url' => 'https://generativelanguage.googleapis.com/v1',
-            'services.gemini_fallback.image_model' => 'gemini-image-test',
+            'services.openrouter.key' => 'screenshot-test-key',
+            'services.openrouter.base_url' => 'https://openrouter.ai/api/v1',
+            'services.openrouter.image_model' => 'google/gemini-image-test',
+            'services.gemini_fallback.key' => null,
         ]);
 
         $this->withServerVariables($this->cmsServer())->post('/cms/screenshot-maker/references', [
@@ -51,12 +52,11 @@ class ScreenshotMakerTest extends TestCase
         imagepng($source);
         $png = ob_get_clean();
         imagedestroy($source);
-        Http::fake(['generativelanguage.googleapis.com/*' => Http::response([
-            'steps' => [['type' => 'model_output', 'content' => [[
-                'type' => 'image',
-                'mime_type' => 'image/png',
-                'data' => base64_encode($png),
-            ]]]],
+        Http::fake(['openrouter.ai/*' => Http::response([
+            'data' => [[
+                'media_type' => 'image/png',
+                'b64_json' => base64_encode($png),
+            ]],
         ])]);
 
         $response = $this->withServerVariables($this->cmsServer())->post('/cms/screenshot-maker/generate', [
@@ -69,26 +69,24 @@ class ScreenshotMakerTest extends TestCase
             'people_count' => 2,
             'people_description' => 'Two diverse friends laughing together.',
             'app_screen' => UploadedFile::fake()->image('misery-screen.png', 390, 844),
-        ])->assertOk()->assertJsonPath('width', 1290)->assertJsonPath('height', 2796);
+        ])->assertOk()
+            ->assertJsonPath('width', 1290)
+            ->assertJsonPath('height', 2796)
+            ->assertJsonPath('provider', 'Gemini via OpenRouter')
+            ->assertJsonPath('model', 'google/gemini-image-test');
 
         $files = Storage::disk('public')->files('screenshots/generated');
         $this->assertCount(1, $files);
         [$width, $height] = getimagesizefromstring(Storage::disk('public')->get($files[0]));
         $this->assertSame([1290, 2796], [$width, $height]);
         Http::assertSent(function ($request) {
-            $input = $request['input'][0];
-            $content = $input['content'];
-
-            return $request->url() === 'https://generativelanguage.googleapis.com/v1/interactions'
-                && $request['model'] === 'gemini-image-test'
-                && $request['response_format']['type'] === 'image'
-                && $request['response_format']['aspect_ratio'] === '9:16'
-                && ! isset($request['response_format']['delivery'])
-                && $input['type'] === 'user_input'
-                && str_contains($content[0]['text'], 'Misery-yellow (#FACC15) rainbow')
-                && collect($content)->where('type', 'text')->count() === 1
-                && collect($content)->where('type', 'image')->where('mime_type', 'image/jpeg')->isNotEmpty()
-                && collect($content)->where('type', 'image')->where('mime_type', 'image/png')->isNotEmpty();
+            return $request->url() === 'https://openrouter.ai/api/v1/images'
+                && $request['model'] === 'google/gemini-image-test'
+                && $request['resolution'] === '2K'
+                && $request['aspect_ratio'] === '9:16'
+                && str_contains($request['prompt'], 'Misery-yellow (#FACC15) rainbow')
+                && collect($request['input_references'])->contains(fn ($reference) => str_starts_with($reference['image_url']['url'], 'data:image/jpeg;base64,'))
+                && collect($request['input_references'])->contains(fn ($reference) => str_starts_with($reference['image_url']['url'], 'data:image/png;base64,'));
         });
         $this->assertStringContainsString('generated/', $response->json('url'));
     }

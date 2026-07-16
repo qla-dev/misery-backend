@@ -426,6 +426,18 @@ class CmsTest extends TestCase
         $original = ob_get_clean();
         imagedestroy($image);
         Storage::disk('public')->put($originalPath, $original);
+        config([
+            'services.openrouter.key' => 'enhancement-test-key',
+            'services.openrouter.base_url' => 'https://openrouter.ai/api/v1',
+            'services.openrouter.image_model' => 'google/gemini-image-test',
+            'services.gemini_fallback.key' => null,
+        ]);
+        Http::fake(['openrouter.ai/*' => Http::response([
+            'data' => [[
+                'media_type' => 'image/jpeg',
+                'b64_json' => base64_encode($original),
+            ]],
+        ])]);
 
         $card = Card::create([
             'title' => 'Flat tire',
@@ -439,7 +451,7 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)
             ->post('/cms/cards/'.$card->id.'/enhance-artwork')
             ->assertRedirect(route('cms.cards.edit', $card))
-            ->assertSessionHas('success', 'Artwork enhanced to 1024 × 1024 and optimized below 100 KB.');
+            ->assertSessionHas('success', 'Artwork enhanced with Gemini via OpenRouter using google/gemini-image-test, then optimized to 1024 × 1024 below 100 KB.');
 
         $enhancedPath = $card->fresh()->image;
         $this->assertStringContainsString('-enhanced-', $enhancedPath);
@@ -452,6 +464,11 @@ class CmsTest extends TestCase
         $this->assertSame(1024, imagesx($enhanced));
         $this->assertSame(1024, imagesy($enhanced));
         imagedestroy($enhanced);
+        Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/images'
+            && $request['model'] === 'google/gemini-image-test'
+            && $request['aspect_ratio'] === '1:1'
+            && str_contains($request['prompt'], 'image restoration, not a redesign')
+            && str_starts_with($request['input_references'][0]['image_url']['url'], 'data:image/jpeg;base64,'));
     }
 
     public function test_generate_action_returns_to_cms_when_provider_returns_no_image(): void

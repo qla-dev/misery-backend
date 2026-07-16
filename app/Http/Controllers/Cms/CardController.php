@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Cms;
 use App\Http\Controllers\Controller;
 use App\Models\Card;
 use App\Models\Stack;
+use App\Services\GeminiImageGenerator;
 use DOMDocument;
 use DOMElement;
 use Illuminate\Http\Client\RequestException;
@@ -484,7 +485,7 @@ class CardController extends Controller
         return redirect()->route('cms.cards.edit', $card)->with('success', 'Square artwork crop saved.');
     }
 
-    public function enhanceArtwork(Card $card)
+    public function enhanceArtwork(Card $card, GeminiImageGenerator $generator)
     {
         $previousPath = (string) $card->image;
         abort_if($previousPath === '' || $previousPath === '0' || Str::startsWith($previousPath, ['http://', 'https://']), 422, 'Only locally stored card artwork can be enhanced.');
@@ -504,11 +505,39 @@ class CardController extends Controller
             abort(422, 'Artwork must be a square image of at least 128 pixels before enhancement.');
         }
 
-        $enhanced = $this->enhanceCardArtwork($source);
         imagedestroy($source);
-        $jpeg = $this->encodeCardJpeg($enhanced);
-        imagedestroy($enhanced);
-        abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 422, 'Enhanced artwork could not be optimized below 100 KB.');
+
+        $prompt = implode("\n", [
+            'Enhance and restore the supplied Misery Meter card artwork at high resolution.',
+            'This is image restoration, not a redesign: preserve the exact composition, crop, number of people, poses, objects, proportions, placements, and visual meaning.',
+            'Keep the solid black background and the existing black, pure white, and Misery yellow (#FACC15) palette. Do not introduce text, logos, borders, gradients, shadows, textures, new props, or new subjects.',
+            'Remove JPEG artifacts, blockiness, pixelation, jagged diagonals, blurry contours, color fringing, and smeared edges. Reconstruct every silhouette and object with crisp, smooth, precision-vector-like boundaries.',
+            'Return one square image only. It must look like the same artwork rendered cleanly at professional high resolution.',
+        ]);
+
+        try {
+            $generated = $generator->generate($prompt, [[
+                'mime_type' => (string) (getimagesizefromstring($original)['mime'] ?? 'image/jpeg'),
+                'data' => $original,
+                'label' => 'This is the exact artwork to restore. Preserve it faithfully and only improve rendering quality.',
+            ]], '1:1');
+            $generatedSource = @imagecreatefromstring($generated['data']);
+            throw_unless($generatedSource !== false, RuntimeException::class, 'The enhancement model returned an invalid image.');
+            throw_unless(imagesx($generatedSource) === imagesy($generatedSource), RuntimeException::class, 'The enhancement model did not return a square image.');
+            $enhanced = $this->enhanceCardArtwork($generatedSource);
+            imagedestroy($generatedSource);
+            $jpeg = $this->encodeCardJpeg($enhanced);
+            imagedestroy($enhanced);
+            throw_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, RuntimeException::class, 'Enhanced artwork could not be optimized below 100 KB.');
+        } catch (Throwable $error) {
+            Log::error('CMS Gemini card artwork enhancement failed', [
+                'card_id' => $card->id,
+                'exception' => $error,
+            ]);
+
+            return redirect()->route('cms.cards.edit', $card)
+                ->withErrors(['generation' => 'Artwork enhancement failed: '.($error->getMessage() ?: 'Unknown image provider error.')]);
+        }
 
         $path = 'cards/generated/card-'.$card->id.'-enhanced-'.Str::uuid().'.jpg';
         Storage::disk('public')->put($path, $jpeg);
@@ -523,10 +552,12 @@ class CardController extends Controller
             'source_bytes' => strlen($original),
             'jpeg_bytes' => strlen($jpeg),
             'storage_path' => $path,
+            'provider' => $generated['provider'],
+            'model' => $generated['model'],
         ]);
 
         return redirect()->route('cms.cards.edit', $card)
-            ->with('success', 'Artwork enhanced to 1024 × 1024 and optimized below 100 KB.');
+            ->with('success', 'Artwork enhanced with '.$generated['provider'].' using '.$generated['model'].', then optimized to 1024 × 1024 below 100 KB.');
     }
 
     private function responseCost(array $response): ?float

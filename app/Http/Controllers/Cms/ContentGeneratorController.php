@@ -134,7 +134,8 @@ class ContentGeneratorController extends Controller
 
             return response()->json([
                 'url' => route('cms.content.assets', ['filename' => $filename]),
-                'provider' => 'Gemini',
+                'provider' => $result['provider'],
+                'model' => $result['model'],
             ]);
         } catch (Throwable $error) {
             Log::error('CMS silhouette generation failed', ['exception' => $error, 'slot' => $data['slot']]);

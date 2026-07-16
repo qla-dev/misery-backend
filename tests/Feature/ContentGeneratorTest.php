@@ -92,17 +92,17 @@ class ContentGeneratorTest extends TestCase
     {
         Storage::fake('public');
         config([
-            'services.gemini_fallback.key' => 'image-test-key',
-            'services.gemini_fallback.base_url' => 'https://generativelanguage.googleapis.com/v1',
-            'services.gemini_fallback.image_model' => 'gemini-image-test',
+            'services.openrouter.key' => 'image-test-key',
+            'services.openrouter.base_url' => 'https://openrouter.ai/api/v1',
+            'services.openrouter.image_model' => 'google/gemini-image-test',
+            'services.gemini_fallback.key' => null,
         ]);
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
-        Http::fake(['generativelanguage.googleapis.com/*' => Http::response([
-            'steps' => [['type' => 'model_output', 'content' => [[
-                'type' => 'image',
-                'mime_type' => 'image/png',
-                'data' => base64_encode($png),
-            ]]]],
+        Http::fake(['openrouter.ai/*' => Http::response([
+            'data' => [[
+                'media_type' => 'image/png',
+                'b64_json' => base64_encode($png),
+            ]],
         ])]);
 
         foreach (['primary', 'secondary'] as $slot) {
@@ -110,14 +110,16 @@ class ContentGeneratorTest extends TestCase
                 'slot' => $slot,
                 'description' => 'A person reacts to a terrible travel disaster.',
                 'context' => 'A terrible trip becomes a party game story.',
-            ])->assertOk()->assertJsonPath('provider', 'Gemini');
+            ])->assertOk()
+                ->assertJsonPath('provider', 'Gemini via OpenRouter')
+                ->assertJsonPath('model', 'google/gemini-image-test');
         }
 
         $this->assertCount(2, Storage::disk('public')->files('content/silhouettes'));
-        Http::assertSent(fn ($request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/interactions'
-            && $request['input'][0]['type'] === 'user_input'
-            && str_contains($request['input'][0]['content'][0]['text'], 'standalone editorial silhouette')
-            && collect($request['input'][0]['content'])->where('type', 'image')->where('mime_type', 'image/png')->isNotEmpty()
-            && collect($request['input'][0]['content'])->where('mime_type', 'image/svg+xml')->isEmpty());
+        Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/images'
+            && $request['model'] === 'google/gemini-image-test'
+            && str_contains($request['prompt'], 'standalone editorial silhouette')
+            && collect($request['input_references'])->contains(fn ($reference) => str_starts_with($reference['image_url']['url'], 'data:image/png;base64,'))
+            && collect($request['input_references'])->every(fn ($reference) => ! str_starts_with($reference['image_url']['url'], 'data:image/svg+xml;base64,')));
     }
 }

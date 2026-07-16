@@ -107,7 +107,8 @@ class ScreenshotMakerController extends Controller
                 'filename' => $filename,
                 'width' => 1290,
                 'height' => 2796,
-                'provider' => 'Gemini',
+                'provider' => $result['provider'],
+                'model' => $result['model'],
             ]);
         } catch (Throwable $error) {
             Log::error('CMS App Store screenshot generation failed', [
