@@ -52,10 +52,11 @@ class ScreenshotMakerTest extends TestCase
         $png = ob_get_clean();
         imagedestroy($source);
         Http::fake(['generativelanguage.googleapis.com/*' => Http::response([
-            'candidates' => [['content' => ['parts' => [['inlineData' => [
-                'mimeType' => 'image/png',
+            'steps' => [['type' => 'model_output', 'content' => [[
+                'type' => 'image',
+                'mime_type' => 'image/png',
                 'data' => base64_encode($png),
-            ]]]]]],
+            ]]]],
         ])]);
 
         $response = $this->withServerVariables($this->cmsServer())->post('/cms/screenshot-maker/generate', [
@@ -75,11 +76,15 @@ class ScreenshotMakerTest extends TestCase
         [$width, $height] = getimagesizefromstring(Storage::disk('public')->get($files[0]));
         $this->assertSame([1290, 2796], [$width, $height]);
         Http::assertSent(function ($request) {
-            $parts = $request['contents'][0]['parts'];
+            $input = $request['input'];
 
-            return str_contains($parts[0]['text'], 'Misery-yellow (#FACC15) rainbow')
-                && collect($parts)->where('inlineData.mimeType', 'image/jpeg')->isNotEmpty()
-                && collect($parts)->where('inlineData.mimeType', 'image/png')->isNotEmpty();
+            return $request->url() === 'https://generativelanguage.googleapis.com/v1/interactions'
+                && $request['model'] === 'gemini-image-test'
+                && $request['response_format']['type'] === 'image'
+                && $request['response_format']['aspect_ratio'] === '9:16'
+                && str_contains($input[0]['text'], 'Misery-yellow (#FACC15) rainbow')
+                && collect($input)->where('type', 'image')->where('mime_type', 'image/jpeg')->isNotEmpty()
+                && collect($input)->where('type', 'image')->where('mime_type', 'image/png')->isNotEmpty();
         });
         $this->assertStringContainsString('generated/', $response->json('url'));
     }

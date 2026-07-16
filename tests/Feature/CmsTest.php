@@ -64,7 +64,7 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)->patch('/cms/stacks/'.$stack->id, [
             'name' => 'Normal Plus',
             'color' => '#12ABEF',
-            'icon_key' => 'party-popper',
+            'icon_key' => 'thermometer-sun',
             'description' => 'Updated English description',
             'description_bs' => 'Ažurirani bosanski opis',
         ])->assertRedirect()->assertSessionHas('success', 'Stack updated.');
@@ -74,7 +74,7 @@ class CmsTest extends TestCase
                 'slug' => 'normal',
                 'name' => 'Normal Plus',
                 'color' => '#12ABEF',
-                'icon_key' => 'party-popper',
+                'icon_key' => 'thermometer-sun',
                 'description_bs' => 'Ažurirani bosanski opis',
                 'is_premium' => false,
             ]);

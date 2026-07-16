@@ -16,31 +16,57 @@ class GeminiImageGenerator
         $key = (string) config('services.gemini_fallback.key');
         throw_if($key === '', RuntimeException::class, 'FALLBACK_GEMINI_API_KEY or GEMINI_API_KEY is not configured.');
 
-        $parts = [['text' => $prompt]];
+        $input = [['type' => 'text', 'text' => $prompt]];
         foreach ($references as $index => $reference) {
-            $parts[] = ['text' => $reference['label'] ?? 'Visual reference '.($index + 1).'. Use its design principles without copying its text, logo, or app identity.'];
-            $parts[] = ['inlineData' => [
-                'mimeType' => $reference['mime_type'],
+            $input[] = [
+                'type' => 'text',
+                'text' => $reference['label'] ?? 'Visual reference '.($index + 1).'. Use its design principles without copying its text, logo, or app identity.',
+            ];
+            $input[] = [
+                'type' => 'image',
+                'mime_type' => $reference['mime_type'],
                 'data' => base64_encode($reference['data']),
-            ]];
+            ];
         }
-        $parts[] = ['text' => 'Return only the finished image. Do not return explanatory text.'];
+        $input[] = ['type' => 'text', 'text' => 'Return only the finished image. Do not return explanatory text.'];
 
         $model = (string) config('services.gemini_fallback.image_model');
         $response = Http::withHeaders(['x-goog-api-key' => $key])
             ->acceptJson()
             ->asJson()
             ->timeout(180)
-            ->post(rtrim((string) config('services.gemini_fallback.base_url'), '/').'/models/'.rawurlencode($model).':generateContent', [
-                'contents' => [['role' => 'user', 'parts' => $parts]],
-                'generationConfig' => [
-                    'responseModalities' => ['IMAGE'],
-                    'imageConfig' => ['aspectRatio' => $aspectRatio, 'imageSize' => '2K'],
+            ->post(rtrim((string) config('services.gemini_fallback.base_url'), '/').'/interactions', [
+                'model' => $model,
+                'input' => $input,
+                'response_format' => [
+                    'type' => 'image',
+                    'mime_type' => 'image/jpeg',
+                    'delivery' => 'inline',
+                    'aspect_ratio' => $aspectRatio,
+                    'image_size' => '2K',
                 ],
             ])->throw()->json();
 
-        foreach ((array) data_get($response, 'candidates.0.content.parts', []) as $part) {
-            $encoded = data_get($part, 'inlineData.data') ?? data_get($part, 'inline_data.data');
+        $images = [];
+        $outputImage = data_get($response, 'output_image');
+        if (is_array($outputImage)) {
+            $images[] = $outputImage;
+        }
+
+        foreach ((array) data_get($response, 'steps', []) as $step) {
+            if (data_get($step, 'type') !== 'model_output') {
+                continue;
+            }
+
+            foreach ((array) data_get($step, 'content', []) as $content) {
+                if (data_get($content, 'type') === 'image') {
+                    $images[] = $content;
+                }
+            }
+        }
+
+        foreach (array_reverse($images) as $image) {
+            $encoded = data_get($image, 'data');
             if (! is_string($encoded) || $encoded === '') {
                 continue;
             }
@@ -50,7 +76,7 @@ class GeminiImageGenerator
 
             return [
                 'data' => $data,
-                'mime_type' => (string) (data_get($part, 'inlineData.mimeType') ?? data_get($part, 'inline_data.mime_type') ?? 'image/png'),
+                'mime_type' => (string) (data_get($image, 'mime_type') ?? 'image/jpeg'),
             ];
         }
 

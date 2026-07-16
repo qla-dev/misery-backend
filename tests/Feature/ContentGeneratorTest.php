@@ -94,10 +94,11 @@ class ContentGeneratorTest extends TestCase
         ]);
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
         Http::fake(['generativelanguage.googleapis.com/*' => Http::response([
-            'candidates' => [['content' => ['parts' => [['inlineData' => [
-                'mimeType' => 'image/png',
+            'steps' => [['type' => 'model_output', 'content' => [[
+                'type' => 'image',
+                'mime_type' => 'image/png',
                 'data' => base64_encode($png),
-            ]]]]]],
+            ]]]],
         ])]);
 
         foreach (['primary', 'secondary'] as $slot) {
@@ -109,6 +110,7 @@ class ContentGeneratorTest extends TestCase
         }
 
         $this->assertCount(2, Storage::disk('public')->files('content/silhouettes'));
-        Http::assertSent(fn ($request) => str_contains($request['contents'][0]['parts'][0]['text'], 'standalone editorial silhouette'));
+        Http::assertSent(fn ($request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/interactions'
+            && str_contains($request['input'][0]['text'], 'standalone editorial silhouette'));
     }
 }
