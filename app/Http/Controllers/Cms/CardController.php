@@ -26,6 +26,7 @@ class CardController extends Controller
         $cards = Card::with('stack')->when($request->string('q')->toString(), function ($query, $search) {
             $query->where(fn ($q) => $q->where('title', 'like', "%{$search}%")->orWhere('subtitle', 'like', "%{$search}%"));
         })->when($request->filled('status'), fn ($query) => $query->where('status', $request->boolean('status')))
+            ->when($request->filled('enhanced'), fn ($query) => $query->where('artwork_enhanced', $request->boolean('enhanced')))
             ->when($request->filled('stack'), fn ($query) => $query->where('stack_id', $request->integer('stack')))
             ->orderBy('score')->paginate(25)->withQueryString();
         $stacks = Stack::query()->orderBy('name')->get();
@@ -549,7 +550,8 @@ class CardController extends Controller
         $prompt = implode("\n", [
             'Enhance and restore the supplied Misery Meter card artwork at high resolution.',
             'This is image restoration, not a redesign: preserve the exact composition, crop, number of people, poses, objects, proportions, placements, and visual meaning.',
-            'Keep the solid black background and the existing black, pure white, and Misery yellow (#FACC15) palette. Do not introduce text, logos, borders, gradients, shadows, textures, new props, or new subjects.',
+            'Keep the solid black background and use exactly pure black #000000, pure white #FFFFFF, and canonical Misery yellow #FACC15. If the source yellow has drifted toward orange, gold, amber, or another shade, correct every yellow area back to the uniform solid color #FACC15. Do not introduce text, logos, borders, gradients, shadows, textures, new props, or new subjects.',
+            'AUTO-ZOOM AND REFRAME: inspect the black empty margin independently from the top, bottom, left, and right edges. Uniformly zoom the original composition in until the outermost real non-black artwork reaches the available square bounds from all four sides. Remove unnecessary black padding, but keep every person, object, limb, and event element completely visible. Never stretch, distort, crop, cut off, redraw, rotate, or rearrange the composition. If an edge already contains real artwork, preserve that edge and zoom only as far as all content remains complete.',
             'Remove JPEG artifacts, blockiness, pixelation, jagged diagonals, blurry contours, color fringing, and smeared edges. Reconstruct every silhouette and object with crisp, smooth, precision-vector-like boundaries.',
             'Return one square image only. It must look like the same artwork rendered cleanly at professional high resolution.',
         ]);
@@ -563,7 +565,6 @@ class CardController extends Controller
             $generatedSource = @imagecreatefromstring($generated['data']);
             throw_unless($generatedSource !== false, RuntimeException::class, 'The enhancement model returned an invalid image.');
             throw_unless(imagesx($generatedSource) === imagesy($generatedSource), RuntimeException::class, 'The enhancement model did not return a square image.');
-            $generatedSource = $this->autoZoomArtworkToContent($generatedSource);
             $enhanced = $this->enhanceCardArtwork($generatedSource);
             imagedestroy($generatedSource);
             $enhanced = $this->normalizeEnhancedArtworkColors($enhanced);
@@ -1106,62 +1107,6 @@ class CardController extends Controller
         imagedestroy($working);
 
         return $result;
-    }
-
-    private function autoZoomArtworkToContent(\GdImage $source): \GdImage
-    {
-        $width = imagesx($source);
-        $height = imagesy($source);
-        $left = $width;
-        $right = -1;
-        $top = $height;
-        $bottom = -1;
-        $isContent = static function (int $color): bool {
-            $red = ($color >> 16) & 0xFF;
-            $green = ($color >> 8) & 0xFF;
-            $blue = $color & 0xFF;
-
-            // Ignore black-background JPEG noise while treating the first real
-            // white/yellow/colored pixel as artwork content.
-            return max($red, $green, $blue) > 28 && ($red + $green + $blue) > 72;
-        };
-
-        for ($y = 0; $y < $height; $y++) {
-            for ($x = 0; $x < $width; $x++) {
-                if (! $isContent(imagecolorat($source, $x, $y))) {
-                    continue;
-                }
-                $left = min($left, $x);
-                $right = max($right, $x);
-                $top = min($top, $y);
-                $bottom = max($bottom, $y);
-            }
-        }
-
-        if ($right < $left || $bottom < $top) {
-            return $source;
-        }
-
-        $contentWidth = $right - $left + 1;
-        $contentHeight = $bottom - $top + 1;
-        $cropSize = min($width, $height, max($contentWidth, $contentHeight));
-        if ($cropSize < 16 || $cropSize >= min($width, $height)) {
-            return $source;
-        }
-
-        // Use the tightest square enclosing every non-black pixel. This zooms as
-        // far as possible without stretching the composition or clipping content.
-        $centerX = ($left + $right) / 2;
-        $centerY = ($top + $bottom) / 2;
-        $cropX = max(0, min($width - $cropSize, (int) round($centerX - ($cropSize / 2))));
-        $cropY = max(0, min($height - $cropSize, (int) round($centerY - ($cropSize / 2))));
-        $zoomed = imagecreatetruecolor($width, $height);
-        $black = imagecolorallocate($zoomed, 0, 0, 0);
-        imagefill($zoomed, 0, 0, $black);
-        imagecopyresampled($zoomed, $source, 0, 0, $cropX, $cropY, $width, $height, $cropSize, $cropSize);
-        imagedestroy($source);
-
-        return $zoomed;
     }
 
     private function normalizeEnhancedArtworkColors(\GdImage $source): \GdImage

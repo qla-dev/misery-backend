@@ -28,11 +28,15 @@ class CmsTest extends TestCase
             ->assertOk()
             ->assertSee('Bad day')
             ->assertSee('All packs')
+            ->assertSee('All enhancement')
+            ->assertSee('Unenhanced')
             ->assertSee('Export')
             ->assertSee('Generate')
             ->assertSee('Enhance selected')
             ->assertSee('Bosnian translate selected')
             ->assertSee('selectVisibleCards', false)
+            ->assertSee('tabTop=footerTop+115', false)
+            ->assertSee("rgba(250,204,21,.35)", false)
             ->assertSee('CARD_EXPORT_WIDTH=1200', false);
         $this->withServerVariables($server)->get('/cms/native-card-artwork')
             ->assertOk()
@@ -43,6 +47,24 @@ class CmsTest extends TestCase
         ])->assertRedirect();
 
         $this->assertDatabaseHas('cards', ['id' => $card->id, 'title' => 'Worse day', 'deck' => 'normal']);
+    }
+
+    public function test_cms_filters_cards_by_artwork_enhancement_state(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        Card::create(['title' => 'Enhanced card', 'score' => 10, 'artwork_enhanced' => true, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        Card::create(['title' => 'Unenhanced card', 'score' => 20, 'artwork_enhanced' => false, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->get('/cms/cards?enhanced=1')
+            ->assertOk()
+            ->assertSee('Enhanced card')
+            ->assertDontSee('Unenhanced card');
+
+        $this->withServerVariables($server)->get('/cms/cards?enhanced=0')
+            ->assertOk()
+            ->assertSee('Unenhanced card')
+            ->assertDontSee('Enhanced card');
     }
 
     public function test_cms_can_approve_and_return_a_card_to_draft(): void
@@ -120,6 +142,20 @@ class CmsTest extends TestCase
                 'description_bs' => 'Ažurirani bosanski opis',
                 'is_premium' => false,
             ]);
+    }
+
+    public function test_stack_api_counts_only_active_cards(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+
+        Card::create(['title' => 'Active one', 'score' => 10, 'status' => true, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        Card::create(['title' => 'Active two', 'score' => 20, 'status' => true, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        Card::create(['title' => 'Inactive', 'score' => 30, 'status' => false, 'deck' => 'normal', 'stack_id' => $stack->id]);
+
+        $normalStack = collect($this->getJson('/api/stacks')->assertOk()->json('data'))
+            ->firstWhere('slug', 'normal');
+
+        $this->assertSame(2, $normalStack['active_cards_count']);
     }
 
     public function test_cms_ai_translation_explicitly_requests_standard_bosnian_and_returns_editable_copy(): void
@@ -532,11 +568,20 @@ class CmsTest extends TestCase
         $this->assertNotFalse($enhanced);
         $this->assertSame(1024, imagesx($enhanced));
         $this->assertSame(1024, imagesy($enhanced));
+        $center = imagecolorat($enhanced, 512, 512);
+        $this->assertEqualsWithDelta(250, ($center >> 16) & 0xFF, 15);
+        $this->assertEqualsWithDelta(204, ($center >> 8) & 0xFF, 15);
+        $this->assertEqualsWithDelta(21, $center & 0xFF, 15);
         imagedestroy($enhanced);
         Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/images'
             && $request['model'] === 'google/gemini-image-test'
             && $request['aspect_ratio'] === '1:1'
             && str_contains($request['prompt'], 'image restoration, not a redesign')
+            && str_contains($request['prompt'], 'AUTO-ZOOM AND REFRAME')
+            && str_contains($request['prompt'], 'black empty margin independently from the top, bottom, left, and right edges')
+            && str_contains($request['prompt'], 'outermost real non-black artwork reaches the available square bounds from all four sides')
+            && str_contains($request['prompt'], 'canonical Misery yellow #FACC15')
+            && str_contains($request['prompt'], 'correct every yellow area back to the uniform solid color #FACC15')
             && str_starts_with($request['input_references'][0]['image_url']['url'], 'data:image/jpeg;base64,'));
 
         $this->withServerVariables($server)->get('/cms/cards')

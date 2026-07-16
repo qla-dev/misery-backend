@@ -18,6 +18,7 @@ class StackResource extends JsonResource
             'description' => $this->description,
             'description_bs' => $this->description_bs,
             'is_premium' => $this->slug !== 'normal',
+            'active_cards_count' => (int) ($this->active_cards_count ?? 0),
         ];
     }
 }

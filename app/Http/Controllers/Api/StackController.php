@@ -10,6 +10,13 @@ class StackController extends Controller
 {
     public function index()
     {
-        return StackResource::collection(Stack::query()->orderBy('id')->get());
+        return StackResource::collection(
+            Stack::query()
+                ->withCount([
+                    'cards as active_cards_count' => fn ($query) => $query->where('status', true),
+                ])
+                ->orderBy('id')
+                ->get()
+        );
     }
 }
