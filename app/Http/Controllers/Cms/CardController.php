@@ -563,8 +563,10 @@ class CardController extends Controller
             $generatedSource = @imagecreatefromstring($generated['data']);
             throw_unless($generatedSource !== false, RuntimeException::class, 'The enhancement model returned an invalid image.');
             throw_unless(imagesx($generatedSource) === imagesy($generatedSource), RuntimeException::class, 'The enhancement model did not return a square image.');
+            $generatedSource = $this->autoZoomArtworkToContent($generatedSource);
             $enhanced = $this->enhanceCardArtwork($generatedSource);
             imagedestroy($generatedSource);
+            $enhanced = $this->normalizeEnhancedArtworkColors($enhanced);
             $jpeg = $this->encodeCardJpeg($enhanced);
             imagedestroy($enhanced);
             throw_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, RuntimeException::class, 'Enhanced artwork could not be optimized below 100 KB.');
@@ -1104,6 +1106,94 @@ class CardController extends Controller
         imagedestroy($working);
 
         return $result;
+    }
+
+    private function autoZoomArtworkToContent(\GdImage $source): \GdImage
+    {
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $left = $width;
+        $right = -1;
+        $top = $height;
+        $bottom = -1;
+        $isContent = static function (int $color): bool {
+            $red = ($color >> 16) & 0xFF;
+            $green = ($color >> 8) & 0xFF;
+            $blue = $color & 0xFF;
+
+            // Ignore black-background JPEG noise while treating the first real
+            // white/yellow/colored pixel as artwork content.
+            return max($red, $green, $blue) > 28 && ($red + $green + $blue) > 72;
+        };
+
+        for ($y = 0; $y < $height; $y++) {
+            for ($x = 0; $x < $width; $x++) {
+                if (! $isContent(imagecolorat($source, $x, $y))) {
+                    continue;
+                }
+                $left = min($left, $x);
+                $right = max($right, $x);
+                $top = min($top, $y);
+                $bottom = max($bottom, $y);
+            }
+        }
+
+        if ($right < $left || $bottom < $top) {
+            return $source;
+        }
+
+        $contentWidth = $right - $left + 1;
+        $contentHeight = $bottom - $top + 1;
+        $cropSize = min($width, $height, max($contentWidth, $contentHeight));
+        if ($cropSize < 16 || $cropSize >= min($width, $height)) {
+            return $source;
+        }
+
+        // Use the tightest square enclosing every non-black pixel. This zooms as
+        // far as possible without stretching the composition or clipping content.
+        $centerX = ($left + $right) / 2;
+        $centerY = ($top + $bottom) / 2;
+        $cropX = max(0, min($width - $cropSize, (int) round($centerX - ($cropSize / 2))));
+        $cropY = max(0, min($height - $cropSize, (int) round($centerY - ($cropSize / 2))));
+        $zoomed = imagecreatetruecolor($width, $height);
+        $black = imagecolorallocate($zoomed, 0, 0, 0);
+        imagefill($zoomed, 0, 0, $black);
+        imagecopyresampled($zoomed, $source, 0, 0, $cropX, $cropY, $width, $height, $cropSize, $cropSize);
+        imagedestroy($source);
+
+        return $zoomed;
+    }
+
+    private function normalizeEnhancedArtworkColors(\GdImage $source): \GdImage
+    {
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $black = imagecolorallocate($source, 0, 0, 0);
+        $white = imagecolorallocate($source, 255, 255, 255);
+        $miseryYellow = imagecolorallocate($source, 250, 204, 21);
+
+        for ($y = 0; $y < $height; $y++) {
+            for ($x = 0; $x < $width; $x++) {
+                $color = imagecolorat($source, $x, $y);
+                $red = ($color >> 16) & 0xFF;
+                $green = ($color >> 8) & 0xFF;
+                $blue = $color & 0xFF;
+                if ($red <= 24 && $green <= 24 && $blue <= 24) {
+                    imagesetpixel($source, $x, $y, $black);
+                    continue;
+                }
+                if ($red >= 238 && $green >= 238 && $blue >= 238) {
+                    imagesetpixel($source, $x, $y, $white);
+                    continue;
+                }
+                $yellowDistance = ($red - 250) ** 2 + ($green - 204) ** 2 + ($blue - 21) ** 2;
+                if ($yellowDistance <= 70 ** 2) {
+                    imagesetpixel($source, $x, $y, $miseryYellow);
+                }
+            }
+        }
+
+        return $source;
     }
 
     private function enforceGeneratedPaletteAndSquareCorners(\GdImage $source): \GdImage

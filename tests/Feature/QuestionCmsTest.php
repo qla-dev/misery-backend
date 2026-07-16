@@ -27,7 +27,10 @@ class QuestionCmsTest extends TestCase
         $this->withServerVariables($this->server)->get('/cms/generator')
             ->assertOk()
             ->assertSee('Generate card content')
+            ->assertSee('English and Bosnian titles and descriptions')
             ->assertSee('suggested two-decimal misery scores')
+            ->assertSee('Destination deck')
+            ->assertSee('name="stack_id"', false)
             ->assertSee('Number of cards')
             ->assertSee('name="count"', false)
             ->assertSee('min="1" max="20"', false)
@@ -54,13 +57,20 @@ class QuestionCmsTest extends TestCase
     public function test_ai_generator_saves_the_selected_number_of_unique_cards_with_scores(): void
     {
         $this->existingCard('Existing disaster');
+        $selectedStack = Stack::where('slug', 'spicy')->firstOrFail();
         config([
             'services.gemini.key' => 'gemini-test-key',
             'services.gemini.base_url' => 'https://generativelanguage.googleapis.com/v1',
             'services.gemini.text_model' => 'gemini-3.1-flash-lite',
         ]);
 
-        $cards = [['title' => 'Existing disaster', 'description' => 'Duplicate.', 'score' => 44.44]];
+        $cards = [[
+            'title' => 'Existing disaster',
+            'title_bs' => 'Postojeća nesreća',
+            'description' => 'Duplicate.',
+            'description_bs' => 'Duplikat.',
+            'score' => 44.44,
+        ]];
         $titles = [
             'Airport Shuttle Leaves With Your Luggage',
             'Sprinkler Activates During the Wedding Toast',
@@ -77,7 +87,9 @@ class QuestionCmsTest extends TestCase
         foreach ($titles as $index => $title) {
             $cards[] = [
                 'title' => $title,
+                'title_bs' => "Gubitak prtljaga broj {$index}",
                 'description' => "A specific unfortunate event number {$index} unfolds in public.",
+                'description_bs' => "Konkretan nesretan događaj broj {$index} odvija se u javnosti.",
                 'score' => 26 + $index + 0.37,
             ];
         }
@@ -87,19 +99,25 @@ class QuestionCmsTest extends TestCase
 
         $before = Card::count();
         $this->withServerVariables($this->server)->post('/cms/generator', [
-            'theme' => 'mixed', 'severity' => 'mixed', 'count' => 6,
+            'theme' => 'mixed', 'severity' => 'mixed', 'count' => 6, 'stack_id' => $selectedStack->id,
         ])->assertRedirect(route('cms.cards.index'))->assertSessionHas('success');
 
         $this->assertSame($before + 6, Card::count());
         $this->assertSame(6, Card::whereIn('title', $titles)->count());
         $this->assertSame(6, Card::whereIn('title', $titles)->where('image', '0')->count());
         $this->assertSame(6, Card::whereIn('title', $titles)->where('status', false)->count());
+        $this->assertSame(6, Card::whereIn('title', $titles)->where('stack_id', $selectedStack->id)->where('deck', 'spicy')->count());
+        $this->assertSame(6, Card::whereIn('title', $titles)->whereNotNull('title_bs')->whereNotNull('subtitle_bs')->count());
 
         Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
             && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Existing disaster')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'retain the best 6')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Target deck: Spicy')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), '"minItems":6')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), '"title_bs"')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'nominative verbal noun (glagolska imenica)')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Slanje privatne fotografije u porodičnu grupu')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'misery score')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'description'));
     }
@@ -111,13 +129,24 @@ class QuestionCmsTest extends TestCase
         ])->assertRedirect('/cms/generator')->assertSessionHasErrors('count');
     }
 
+    public function test_generator_rejects_an_unknown_destination_deck(): void
+    {
+        $this->withServerVariables($this->server)->from('/cms/generator')->post('/cms/generator', [
+            'theme' => 'mixed', 'severity' => 'mixed', 'count' => 3, 'stack_id' => 999999,
+        ])->assertRedirect('/cms/generator')->assertSessionHasErrors('stack_id');
+    }
+
     public function test_invalid_or_duplicate_generation_batch_saves_nothing(): void
     {
         config(['services.openrouter.key' => 'test-key', 'services.gemini.key' => null]);
         $existing = $this->existingCard('Existing duplicate disaster');
         Http::fake(['openrouter.ai/*' => Http::response([
             'choices' => [['message' => ['content' => json_encode(['cards' => array_fill(0, 10, [
-                'title' => $existing->title, 'description' => $existing->subtitle, 'score' => 50.55,
+                'title' => $existing->title,
+                'title_bs' => 'Postojeći duplikat nesreće',
+                'description' => $existing->subtitle,
+                'description_bs' => 'Opis postojeće kartice.',
+                'score' => 50.55,
             ])])]]],
         ])]);
 

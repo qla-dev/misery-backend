@@ -46,6 +46,8 @@ class CardGeneratorController extends Controller
         return view('cms.generator', [
             'themes' => self::THEMES,
             'severities' => self::SEVERITIES,
+            'stacks' => Stack::query()->orderBy('name')->get(),
+            'defaultStackId' => Stack::query()->where('slug', 'normal')->value('id'),
         ]);
     }
 
@@ -55,8 +57,13 @@ class CardGeneratorController extends Controller
             'theme' => ['required', Rule::in(array_keys(self::THEMES))],
             'severity' => ['required', Rule::in(array_keys(self::SEVERITIES))],
             'count' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_GENERATION_COUNT],
+            'stack_id' => ['sometimes', 'integer', 'exists:stacks,id'],
         ]);
         $selection['count'] = (int) ($selection['count'] ?? self::DEFAULT_GENERATION_COUNT);
+        $stack = isset($selection['stack_id'])
+            ? Stack::query()->findOrFail($selection['stack_id'])
+            : Stack::query()->where('slug', 'normal')->firstOrFail();
+        $selection['stack_name'] = $stack->name;
 
         if (! config('services.gemini.key') && ! config('services.openrouter.key')) {
             return back()->withInput()->withErrors([
@@ -104,12 +111,13 @@ class CardGeneratorController extends Controller
             ]);
         }
 
-        $stack = Stack::where('slug', 'normal')->firstOrFail();
         DB::transaction(function () use ($accepted, $selection, $stack) {
             foreach (array_slice($accepted, 0, $selection['count']) as $candidate) {
                 Card::create([
                     'title' => $candidate['title'],
+                    'title_bs' => $candidate['title_bs'],
                     'subtitle' => $candidate['description'],
+                    'subtitle_bs' => $candidate['description_bs'],
                     'score' => $candidate['score'],
                     'status' => false,
                     'image' => '0',
@@ -178,9 +186,11 @@ class CardGeneratorController extends Controller
         return implode(' ', [
             'You are the senior card editor for Misery Index, a party game about ranking unfortunate situations.',
             'Create vivid, specific, instantly understandable situations that are funny to discuss but plausible enough to score.',
-            'Every card needs a concise title, one sentence of concrete context, and a carefully judged misery score with exactly two decimal places.',
+            'Every card needs concise English and Bosnian titles, one sentence of concrete context in both languages, and a carefully judged misery score with exactly two decimal places.',
             'Score relative to the supplied existing deck: trivial inconvenience is near 0, life-altering catastrophe is near 100.',
             'Avoid trivia questions, answers, fantasy, death, graphic injury, duplicate concepts, vague wording, and alternate wording of an existing card.',
+            'Write standard contemporary Bosnian in the ijekavian standard, never Croatian or Serbian wording. Use č, ć, dž, đ, š and ž correctly.',
+            'The Bosnian title must be a concise nominal phrase headed by a nominative verbal noun (glagolska imenica), never an imperative command or an infinitive.',
         ]);
     }
 
@@ -196,9 +206,12 @@ class CardGeneratorController extends Controller
 
         return implode("\n", [
             "Generate {$candidateCount} candidate Misery Index cards so the application can retain the best {$count}.",
+            'Target deck: '.$selection['stack_name'].'. Make every situation suitable for this deck while still following the selected theme and severity.',
             'Theme: '.self::THEMES[$selection['theme']],
             "Requested severity: {$severityLabel}; every score must be between {$minimum} and {$maximum}.",
             'Use natural English. Title: 4–12 words. Description: one vivid sentence under 180 characters.',
+            'Also provide a natural Bosnian title and description with exactly the same meaning and details as the English copy.',
+            'Bosnian title example: "Send a Private Photo to the Family Group" becomes "Slanje privatne fotografije u porodičnu grupu", never "Pošalji privatnu fotografiju porodičnoj grupi".',
             'Give every score exactly two decimal places and judge it against the existing deck examples below.',
             'Make candidates meaningfully different from each other and from all existing cards.',
             '',
@@ -217,10 +230,12 @@ class CardGeneratorController extends Controller
                     'type' => 'object',
                     'properties' => [
                         'title' => ['type' => 'string'],
+                        'title_bs' => ['type' => 'string'],
                         'description' => ['type' => 'string'],
+                        'description_bs' => ['type' => 'string'],
                         'score' => ['type' => 'number'],
                     ],
-                    'required' => ['title', 'description', 'score'],
+                    'required' => ['title', 'title_bs', 'description', 'description_bs', 'score'],
                     'additionalProperties' => false,
                 ],
             ]],
@@ -239,10 +254,12 @@ class CardGeneratorController extends Controller
 
         foreach ($candidates as $candidate) {
             $title = trim((string) data_get($candidate, 'title', ''));
+            $titleBs = trim((string) data_get($candidate, 'title_bs', ''));
             $description = trim((string) data_get($candidate, 'description', ''));
+            $descriptionBs = trim((string) data_get($candidate, 'description_bs', ''));
             $score = round((float) data_get($candidate, 'score', -1), 2);
             $normalized = $this->normalize($title);
-            if ($title === '' || $description === '' || mb_strlen($title) > 255 || mb_strlen($description) > 1000 || $score < $minimum || $score > $maximum) {
+            if ($title === '' || $titleBs === '' || $description === '' || $descriptionBs === '' || mb_strlen($title) > 255 || mb_strlen($titleBs) > 255 || mb_strlen($description) > 1000 || mb_strlen($descriptionBs) > 1000 || $score < $minimum || $score > $maximum) {
                 continue;
             }
             if (array_any($pool, function (string $existing) use ($normalized): bool {
@@ -252,7 +269,13 @@ class CardGeneratorController extends Controller
             })) {
                 continue;
             }
-            $accepted[] = compact('title', 'description', 'score');
+            $accepted[] = [
+                'title' => $title,
+                'title_bs' => $titleBs,
+                'description' => $description,
+                'description_bs' => $descriptionBs,
+                'score' => $score,
+            ];
             $pool[] = $normalized;
         }
 
