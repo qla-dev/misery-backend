@@ -24,4 +24,8 @@ return [
     'reverb_scheme' => env('REVERB_SCHEME', 'https'),
     'provider_probe_timeout_ms' => max(500, (int) env('REALTIME_PROVIDER_PROBE_TIMEOUT_MS', 2500)),
     'member_inactivity_timeout_seconds' => max(15, (int) env('MEMBER_INACTIVITY_TIMEOUT_SECONDS', 60)),
+    'host_lobby_inactivity_timeout_seconds' => max(30, (int) env('HOST_LOBBY_INACTIVITY_TIMEOUT_SECONDS', 120)),
+    'started_game_move_timeout_seconds' => max(60, (int) env('STARTED_GAME_MOVE_TIMEOUT_SECONDS', 180)),
+    'cleanup_username' => env('GAME_CLEANUP_USERNAME', env('CMS_USERNAME', 'admin')),
+    'cleanup_password' => env('GAME_CLEANUP_PASSWORD', env('CMS_PASSWORD', '')),
 ];

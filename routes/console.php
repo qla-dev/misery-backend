@@ -1,24 +1,37 @@
 <?php
 
+use App\Services\GameCleanupService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+Artisan::command('games:cleanup', function (GameCleanupService $cleanup) {
+    $result = $cleanup->cleanup();
+    $this->info("Deleted {$result['lobby_games_deleted']} stale lobby games and {$result['started_games_deleted']} inactive started games.");
+
+    return self::SUCCESS;
+})->purpose('Delete stale lobby games and started games without recent moves');
+
+Schedule::command('games:cleanup')->everyFiveMinutes()->withoutOverlapping();
+
 Artisan::command('rulebook:generate-illustration {--force : Replace the existing generated asset}', function () {
     $key = config('services.openrouter.key');
     if (! filled($key)) {
         $this->error('OPENROUTER_API_KEY is not configured.');
+
         return self::FAILURE;
     }
 
     $destination = base_path('../frontend/assets/images/rulebook-misery-spectrum.jpg');
     if (File::exists($destination) && ! $this->option('force')) {
         $this->error('The rulebook illustration already exists. Use --force to replace it.');
+
         return self::FAILURE;
     }
 

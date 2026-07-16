@@ -16,6 +16,7 @@ use App\Models\Stack;
 use App\Models\User;
 use App\Services\RealtimeTransportAllocator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -156,11 +157,16 @@ class GameController extends Controller
             return $game;
         }
 
-        $cutoff = now()->subSeconds(config('game.member_inactivity_timeout_seconds'));
-        $hasInactiveMembers = DB::table('members')
-            ->where('game_id', $game->id)
-            ->where('updated_at', '<', $cutoff)
-            ->exists();
+        if (! $game->started) {
+            DB::table('members')
+                ->where('game_id', $game->id)
+                ->where('user_id', $requestingUserId)
+                ->update(['updated_at' => now()]);
+
+            return $game->refresh();
+        }
+
+        $hasInactiveMembers = $this->inactiveMemberIds($game)->isNotEmpty();
 
         if (! $hasInactiveMembers) {
             DB::table('members')
@@ -178,11 +184,7 @@ class GameController extends Controller
             }
 
             $originalMemberIds = $this->memberIds($game);
-            $cutoff = now()->subSeconds(config('game.member_inactivity_timeout_seconds'));
-            $inactiveIds = DB::table('members')
-                ->where('game_id', $game->id)
-                ->where('updated_at', '<', $cutoff)
-                ->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+            $inactiveIds = $this->inactiveMemberIds($game)->all();
 
             if (in_array((int) $game->owner_id, $inactiveIds, true)) {
                 $this->terminateGame($game, 'host_inactive');
@@ -203,6 +205,16 @@ class GameController extends Controller
 
             return $game->refresh();
         });
+    }
+
+    private function inactiveMemberIds(Game $game): Collection
+    {
+        $memberCutoff = now()->subSeconds(config('game.member_inactivity_timeout_seconds'));
+
+        return DB::table('members')
+            ->where('game_id', $game->id)
+            ->where('updated_at', '<', $memberCutoff)
+            ->pluck('user_id')->map(fn ($id) => (int) $id);
     }
 
     private function ensurePlayable(Game $game): void
@@ -660,6 +672,7 @@ class GameController extends Controller
 
             $originalMemberIds = $this->memberIds($game);
             abort_unless(in_array($userId, $originalMemberIds, true), 404, 'Player is not in this room.');
+            abort_if(! $game->started && $userId !== (int) $game->owner_id, 409, 'Lobby members are not subject to inactivity removal.');
 
             if ($userId === (int) $game->owner_id) {
                 $this->terminateGame($game, 'host_inactive');

@@ -61,6 +61,38 @@ class GamePresenceTest extends TestCase
         $this->assertNotNull($game->refresh()->terminated_at);
     }
 
+    public function test_lobby_members_are_not_removed_by_request_driven_inactivity_checks(): void
+    {
+        config([
+            'game.member_inactivity_timeout_seconds' => 60,
+            'game.host_lobby_inactivity_timeout_seconds' => 120,
+        ]);
+        $host = User::factory()->create(['color' => 'yellow']);
+        $guest = User::factory()->create(['color' => 'blue']);
+        $game = Game::create(['code' => 'WAIT1234', 'owner_id' => $host->id, 'started' => false]);
+        $game->members()->attach([$host->id, $guest->id]);
+
+        DB::table('members')->where('game_id', $game->id)->where('user_id', $host->id)
+            ->update(['updated_at' => now()->subSeconds(61)]);
+
+        $this->getJson("/api/games/{$game->id}?user_id={$guest->id}")
+            ->assertOk()
+            ->assertJsonPath('data.terminated_at', null)
+            ->assertJsonCount(2, 'data.members');
+
+        DB::table('members')->where('game_id', $game->id)
+            ->update(['updated_at' => now()->subSeconds(121)]);
+
+        $this->getJson("/api/games/{$game->id}?user_id={$guest->id}")
+            ->assertOk()
+            ->assertJsonPath('data.termination_reason', null)
+            ->assertJsonCount(2, 'data.members');
+
+        $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $guest->id])
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Lobby members are not subject to inactivity removal.');
+    }
+
     public function test_host_leaving_intentionally_terminates_game(): void
     {
         $host = User::factory()->create(['color' => 'yellow']);

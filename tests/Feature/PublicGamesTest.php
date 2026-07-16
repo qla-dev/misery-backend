@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Game;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -38,5 +40,21 @@ class PublicGamesTest extends TestCase
         $this->get('/code/ABCD1234')
             ->assertOk()
             ->assertSee('miseryindex:///code/ABCD1234', false);
+    }
+
+    public function test_native_public_games_never_include_started_games(): void
+    {
+        $lobbyHost = User::factory()->create();
+        $startedHost = User::factory()->create();
+        $lobby = Game::create(['code' => 'OPEN1234', 'owner_id' => $lobbyHost->id, 'started' => false]);
+        $started = Game::create(['code' => 'PLAY1234', 'owner_id' => $startedHost->id, 'started' => true]);
+        $lobby->members()->attach($lobbyHost);
+        $started->members()->attach($startedHost);
+
+        $this->getJson('/api/games')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.code', 'OPEN1234')
+            ->assertJsonMissing(['code' => 'PLAY1234']);
     }
 }

@@ -262,7 +262,10 @@ class RealtimeTransportAllocator
             ->join('games', 'games.id', '=', 'members.game_id')
             ->where('games.sync_driver', $provider)
             ->whereNull('games.terminated_at')
-            ->where('members.updated_at', '>=', now()->subSeconds(config('game.member_inactivity_timeout_seconds')))
+            ->where(function ($query) {
+                $query->where('games.started', false)
+                    ->orWhere('members.updated_at', '>=', now()->subSeconds(config('game.member_inactivity_timeout_seconds')));
+            })
             ->count();
     }
 
@@ -271,7 +274,10 @@ class RealtimeTransportAllocator
         return (int) DB::table('members')
             ->join('games', 'games.id', '=', 'members.game_id')
             ->whereNull('games.terminated_at')
-            ->where('members.updated_at', '>=', now()->subSeconds(config('game.member_inactivity_timeout_seconds')))
+            ->where(function ($query) {
+                $query->where('games.started', false)
+                    ->orWhere('members.updated_at', '>=', now()->subSeconds(config('game.member_inactivity_timeout_seconds')));
+            })
             ->count();
     }
 
