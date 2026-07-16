@@ -3,6 +3,7 @@
 use App\Http\Controllers\Cms\CardController as CmsCardController;
 use App\Http\Controllers\Cms\CardGeneratorController as CmsCardGeneratorController;
 use App\Http\Controllers\Cms\ContentGeneratorController as CmsContentGeneratorController;
+use App\Http\Controllers\Cms\ScreenshotMakerController as CmsScreenshotMakerController;
 use App\Http\Controllers\Cms\StackController as CmsStackController;
 use App\Models\Stack;
 use Illuminate\Support\Facades\Route;
@@ -107,9 +108,26 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::post('generator', [CmsCardGeneratorController::class, 'generate'])->name('generator.generate');
     Route::get('content', [CmsContentGeneratorController::class, 'index'])->name('content.index');
     Route::post('content/generate', [CmsContentGeneratorController::class, 'generate'])->name('content.generate');
+    Route::post('content/generate-silhouette', [CmsContentGeneratorController::class, 'generateSilhouette'])->name('content.generate-silhouette');
     Route::get('content-silhouette', function () {
         return response()->file(resource_path('ai/main-silhouette.svg'), ['Content-Type' => 'image/svg+xml']);
     })->name('content.silhouette');
+    Route::get('content-logo-letter', function () {
+        return response()->file(base_path('../frontend/assets/images/i-letter.svg'), ['Content-Type' => 'image/svg+xml']);
+    })->name('content.logo-letter');
+    Route::get('content-assets/{filename}', function (string $filename) {
+        abort_if(str_contains($filename, '/') || str_contains($filename, '..'), 404);
+        $path = 'content/silhouettes/'.$filename;
+        abort_unless(Storage::disk('public')->exists($path), 404);
+
+        return response()->file(Storage::disk('public')->path($path), ['Cache-Control' => 'private, max-age=86400']);
+    })->name('content.assets');
+    Route::get('screenshot-maker', [CmsScreenshotMakerController::class, 'index'])->name('screenshots.index');
+    Route::post('screenshot-maker/generate', [CmsScreenshotMakerController::class, 'generate'])->name('screenshots.generate');
+    Route::post('screenshot-maker/references', [CmsScreenshotMakerController::class, 'storeReferences'])->name('screenshots.references.store');
+    Route::delete('screenshot-maker/references/{filename}', [CmsScreenshotMakerController::class, 'destroyReference'])->name('screenshots.references.destroy');
+    Route::get('screenshot-maker/assets/{path}', [CmsScreenshotMakerController::class, 'asset'])
+        ->where('path', '.+')->name('screenshots.assets');
     Route::get('stacks', [CmsStackController::class, 'index'])->name('stacks.index');
     Route::post('stacks', [CmsStackController::class, 'store'])->name('stacks.store');
     Route::patch('stacks/{stack}', [CmsStackController::class, 'update'])->name('stacks.update');

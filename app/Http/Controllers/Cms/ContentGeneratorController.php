@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Cms;
 
 use App\Http\Controllers\Controller;
+use App\Services\GeminiImageGenerator;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 use Throwable;
@@ -98,6 +101,48 @@ class ContentGeneratorController extends Controller
         ]);
     }
 
+    public function generateSilhouette(Request $request, GeminiImageGenerator $generator): JsonResponse
+    {
+        $data = $request->validate([
+            'description' => ['required', 'string', 'max:1200'],
+            'context' => ['nullable', 'string', 'max:1800'],
+            'slot' => ['required', Rule::in(['primary', 'secondary'])],
+        ]);
+
+        $prompt = implode("\n", [
+            'Create one standalone editorial silhouette illustration for Misery Meter.',
+            'Scene: '.trim($data['description']),
+            'Copy context: '.trim((string) ($data['context'] ?? '')),
+            'Draw a crisp, anonymous, featureless human silhouette acting out the scene. Use only pure white and Misery yellow (#FACC15) on a pure black background.',
+            'The person must remain fully visible and uncropped. Props may be yellow or white. No gradients, shadows, texture, facial features, letters, words, numbers, logos, borders, cards, or UI.',
+            'Keep generous black space around the complete figure so the CMS can position and scale it freely. Strong safety-sign pictogram readability, clean vector-like edges, square canvas.',
+            $data['slot'] === 'secondary'
+                ? 'This is the smaller supporting silhouette. Use a distinct pose that complements a larger primary figure.'
+                : 'This is the primary silhouette. Make the pose immediately readable and visually dominant.',
+        ]);
+
+        try {
+            $reference = file_get_contents(resource_path('ai/main-silhouette.svg'));
+            $result = $generator->generate($prompt, [[
+                'mime_type' => 'image/svg+xml',
+                'data' => $reference === false ? '' : $reference,
+                'label' => 'Required silhouette style reference. Preserve the anonymous white person and yellow accent language, but create the requested new pose.',
+            ]]);
+            $extension = str_contains($result['mime_type'], 'jpeg') ? 'jpg' : 'png';
+            $filename = $data['slot'].'-'.Str::uuid().'.'.$extension;
+            Storage::disk('public')->put('content/silhouettes/'.$filename, $result['data']);
+
+            return response()->json([
+                'url' => route('cms.content.assets', ['filename' => $filename]),
+                'provider' => 'Gemini',
+            ]);
+        } catch (Throwable $error) {
+            Log::error('CMS silhouette generation failed', ['exception' => $error, 'slot' => $data['slot']]);
+
+            return $this->generationError($error);
+        }
+    }
+
     private function generateWithGemini(string $prompt): string
     {
         $response = Http::withHeaders(['x-goog-api-key' => config('services.gemini.key')])
@@ -161,9 +206,9 @@ class ContentGeneratorController extends Controller
             "Create one {$format} concept in {$language}.",
             'Content mode: '.$selection['mode'].'.',
             'Subject or creative brief: '.$subject,
-            'The visual system is fixed: black background, yellow accent, white type, mandatory Misery Meter logo, Bebas Neue title, Outfit subtitle/body, and exactly one white/yellow human silhouette anchored near the bottom.',
+            'The visual system is fixed: black background, yellow accent, white type, mandatory real Misery Meter wordmark with its i-letter mascot, Bebas Neue title, Outfit subtitle/body, and one or two white/yellow human silhouettes.',
             'Write an eyebrow of at most 28 characters, a striking title of at most 62 characters, a subtitle of at most 170 characters, one detail line of at most 72 characters, a CTA of at most 34 characters, and an Instagram caption of at most 500 characters.',
-            'Choose silhouette_position from left, center, right. Choose silhouette_scale from small, medium, large. Choose accent_style from bolt, timeline, spotlight.',
+            'Choose the main silhouette_position from top-left, top-center, top-right, center-left, center-center, center-right, bottom-left, bottom-center, bottom-right. Choose silhouette_scale from small, medium, large. Choose accent_style from bolt, timeline, spotlight.',
             'Do not mention the design instructions in the copy. Do not invent historical dates, places, casualty counts, or quotations.',
         ]);
     }
@@ -179,7 +224,7 @@ class ContentGeneratorController extends Controller
                 'detail' => ['type' => 'string'],
                 'cta' => ['type' => 'string'],
                 'caption' => ['type' => 'string'],
-                'silhouette_position' => ['type' => 'string', 'enum' => ['left', 'center', 'right']],
+                'silhouette_position' => ['type' => 'string', 'enum' => ['top-left', 'top-center', 'top-right', 'center-left', 'center-center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']],
                 'silhouette_scale' => ['type' => 'string', 'enum' => ['small', 'medium', 'large']],
                 'accent_style' => ['type' => 'string', 'enum' => ['bolt', 'timeline', 'spotlight']],
             ],
@@ -197,7 +242,8 @@ class ContentGeneratorController extends Controller
             throw_if($value === '', RuntimeException::class, "Missing {$field}.");
             $result[$field] = mb_substr($value, 0, $limit);
         }
-        $result['silhouette_position'] = in_array(data_get($decoded, 'silhouette_position'), ['left', 'center', 'right'], true) ? data_get($decoded, 'silhouette_position') : 'right';
+        $positions = ['top-left', 'top-center', 'top-right', 'center-left', 'center-center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right', 'left', 'center', 'right'];
+        $result['silhouette_position'] = in_array(data_get($decoded, 'silhouette_position'), $positions, true) ? data_get($decoded, 'silhouette_position') : 'bottom-right';
         $result['silhouette_scale'] = in_array(data_get($decoded, 'silhouette_scale'), ['small', 'medium', 'large'], true) ? data_get($decoded, 'silhouette_scale') : 'medium';
         $result['accent_style'] = in_array(data_get($decoded, 'accent_style'), ['bolt', 'timeline', 'spotlight'], true) ? data_get($decoded, 'accent_style') : 'bolt';
 

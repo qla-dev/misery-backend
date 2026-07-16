@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ContentGeneratorTest extends TestCase
@@ -66,8 +67,8 @@ class ContentGeneratorTest extends TestCase
             $prompt = $request['contents'][0]['parts'][0]['text'];
 
             return str_contains($prompt, 'Instagram Story 1080x1920')
-                && str_contains($prompt, 'mandatory Misery Meter logo')
-                && str_contains($prompt, 'exactly one white/yellow human silhouette')
+                && str_contains($prompt, 'mandatory real Misery Meter wordmark')
+                && str_contains($prompt, 'one or two white/yellow human silhouettes')
                 && str_contains($prompt, 'Bebas Neue title')
                 && str_contains($prompt, 'Outfit subtitle/body');
         });
@@ -81,5 +82,33 @@ class ContentGeneratorTest extends TestCase
             'language' => 'bs',
             'brief' => '',
         ])->assertUnprocessable()->assertJsonValidationErrors('brief');
+    }
+
+    public function test_content_studio_generates_both_editable_silhouette_slots_with_gemini(): void
+    {
+        Storage::fake('public');
+        config([
+            'services.gemini_fallback.key' => 'image-test-key',
+            'services.gemini_fallback.base_url' => 'https://generativelanguage.googleapis.com/v1',
+            'services.gemini_fallback.image_model' => 'gemini-image-test',
+        ]);
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
+        Http::fake(['generativelanguage.googleapis.com/*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['inlineData' => [
+                'mimeType' => 'image/png',
+                'data' => base64_encode($png),
+            ]]]]]],
+        ])]);
+
+        foreach (['primary', 'secondary'] as $slot) {
+            $this->withServerVariables($this->cmsServer())->postJson('/cms/content/generate-silhouette', [
+                'slot' => $slot,
+                'description' => 'A person reacts to a terrible travel disaster.',
+                'context' => 'A terrible trip becomes a party game story.',
+            ])->assertOk()->assertJsonPath('provider', 'Gemini');
+        }
+
+        $this->assertCount(2, Storage::disk('public')->files('content/silhouettes'));
+        Http::assertSent(fn ($request) => str_contains($request['contents'][0]['parts'][0]['text'], 'standalone editorial silhouette'));
     }
 }
