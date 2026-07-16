@@ -36,6 +36,8 @@ class CmsTest extends TestCase
             ->assertSee('Bosnian translate selected')
             ->assertSee('selectVisibleCards', false)
             ->assertSee('tabTop=footerTop+115', false)
+            ->assertSee('labelY=(footerTop+tabTop)/2', false)
+            ->assertSee('textPaddingY=textGap', false)
             ->assertSee("rgba(250,204,21,.35)", false)
             ->assertSee('CARD_EXPORT_WIDTH=1200', false);
         $this->withServerVariables($server)->get('/cms/native-card-artwork')
