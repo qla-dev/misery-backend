@@ -105,6 +105,8 @@
   .site-header>.header-actions>.store-buttons .store-button>span{display:none}
   .site-header .language,.site-header .menu-button,.site-header>.header-actions>.store-buttons .store-button{align-items:center;border-radius:50%;display:flex;height:40px;justify-content:center;min-height:40px;min-width:40px;padding:0;width:40px}
   .site-header .language svg,.site-header .menu-button svg,.site-header>.header-actions>.store-buttons .store-button>svg{height:18px;width:18px}
+  .site-header>.header-actions>.store-buttons{order:-1}
+  .site-header>.header-actions>.store-buttons .store-button>svg{height:15px;width:15px}
   .hero-buttons{gap:20px}
 }
 
