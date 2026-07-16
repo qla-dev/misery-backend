@@ -8,5 +8,6 @@
 <div class="panel stat"><b>{{ \App\Models\Card::whereNotNull('image')->where('image','!=','0')->count() }}</b><span>Cards with artwork</span></div>
 <div class="panel stat"><b>{{ \App\Models\Card::where(fn ($query) => $query->whereNull('image')->orWhere('image','0'))->count() }}</b><span>Cards awaiting artwork</span></div>
 <a class="panel stat" href="{{ route('cms.generator.index') }}"><b>AI</b><span>Generate card content</span></a>
+<a class="panel stat" href="{{ route('cms.content.index') }}"><b>IG</b><span>Create social content</span></a>
 </div>
 @endsection

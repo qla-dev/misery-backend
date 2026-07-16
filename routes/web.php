@@ -2,7 +2,9 @@
 
 use App\Http\Controllers\Cms\CardController as CmsCardController;
 use App\Http\Controllers\Cms\CardGeneratorController as CmsCardGeneratorController;
+use App\Http\Controllers\Cms\ContentGeneratorController as CmsContentGeneratorController;
 use App\Http\Controllers\Cms\StackController as CmsStackController;
+use App\Models\Stack;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
@@ -70,7 +72,7 @@ Route::get('/misery-og.png', function () {
     ]);
 })->name('landing.og-image');
 Route::get('/simulator', fn () => view('play', [
-    'stacks' => \App\Models\Stack::query()->orderBy('name')->get(['name', 'slug']),
+    'stacks' => Stack::query()->orderBy('name')->get(['name', 'slug']),
 ]))->middleware('cms.auth')->name('simulator');
 Route::get('/card-images/{path}', function (string $path) {
     abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
@@ -103,6 +105,11 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::post('cards/{card}/status', [CmsCardController::class, 'setStatus'])->name('cards.status');
     Route::get('generator', [CmsCardGeneratorController::class, 'index'])->name('generator.index');
     Route::post('generator', [CmsCardGeneratorController::class, 'generate'])->name('generator.generate');
+    Route::get('content', [CmsContentGeneratorController::class, 'index'])->name('content.index');
+    Route::post('content/generate', [CmsContentGeneratorController::class, 'generate'])->name('content.generate');
+    Route::get('content-silhouette', function () {
+        return response()->file(resource_path('ai/main-silhouette.svg'), ['Content-Type' => 'image/svg+xml']);
+    })->name('content.silhouette');
     Route::get('stacks', [CmsStackController::class, 'index'])->name('stacks.index');
     Route::post('stacks', [CmsStackController::class, 'store'])->name('stacks.store');
     Route::patch('stacks/{stack}', [CmsStackController::class, 'update'])->name('stacks.update');

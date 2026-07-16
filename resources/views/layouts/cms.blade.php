@@ -9,6 +9,7 @@
 <a href="{{ route('simulator') }}">Simulator</a><a class="{{ request()->routeIs('cms.home')?'active':'' }}" href="{{ route('cms.home') }}">Home</a>
 <a class="{{ request()->routeIs('cms.cards.*')?'active':'' }}" href="{{ route('cms.cards.index') }}">Cards</a>
 <a class="{{ request()->routeIs('cms.generator.*')?'active':'' }}" href="{{ route('cms.generator.index') }}">Generator</a>
+<a class="{{ request()->routeIs('cms.content.*')?'active':'' }}" href="{{ route('cms.content.index') }}">Content</a>
 <a class="{{ request()->routeIs('cms.stacks.*')?'active':'' }}" href="{{ route('cms.stacks.index') }}">Stacks</a>
 </nav></header><main>
 @if(session('success'))<div class="flash">{{ session('success') }}</div>@endif
