@@ -11,6 +11,19 @@ class SimulatorAdminTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_simulator_sends_csrf_token_with_admin_requests(): void
+    {
+        $server = [
+            'PHP_AUTH_USER' => config('cms.username'),
+            'PHP_AUTH_PW' => config('cms.password'),
+        ];
+
+        $this->withServerVariables($server)
+            ->get('/simulator')
+            ->assertOk()
+            ->assertSee("'X-CSRF-TOKEN':csrfToken", false);
+    }
+
     public function test_admin_can_force_delete_a_started_game_from_the_simulator(): void
     {
         $host = User::create(['name' => 'Host']);

@@ -12,8 +12,8 @@ $app = require dirname(__DIR__).'/bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
 
 if (PHP_SAPI !== 'cli') {
-    $expectedUsername = (string) config('game.cleanup_username');
-    $expectedPassword = (string) config('game.cleanup_password');
+    $expectedUsername = (string) (config('game.cleanup_username') ?: config('cms.username'));
+    $expectedPassword = (string) (config('game.cleanup_password') ?: config('cms.password'));
     $username = (string) ($_SERVER['PHP_AUTH_USER'] ?? '');
     $password = (string) ($_SERVER['PHP_AUTH_PW'] ?? '');
 

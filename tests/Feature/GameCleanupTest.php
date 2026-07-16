@@ -43,13 +43,20 @@ class GameCleanupTest extends TestCase
         DB::table('moves')->where('id', $oldMove->id)->update(['created_at' => now()->subSeconds(181), 'updated_at' => now()->subSeconds(181)]);
         DB::table('games')->where('id', $startedWithOldMove->id)->update(['updated_at' => now()->subSeconds(181)]);
 
+        $finishedGame = $this->game('DONE1001', true);
+        DB::table('games')->where('id', $finishedGame->id)->update([
+            'winner_id' => $finishedGame->owner_id,
+            'updated_at' => now()->subSeconds(181),
+        ]);
+
         $result = app(GameCleanupService::class)->cleanup();
 
         $this->assertSame(1, $result['lobby_games_deleted']);
-        $this->assertSame(2, $result['started_games_deleted']);
+        $this->assertSame(3, $result['started_games_deleted']);
         $this->assertDatabaseMissing('games', ['id' => $staleLobby->id]);
         $this->assertDatabaseMissing('games', ['id' => $staleStarted->id]);
         $this->assertDatabaseMissing('games', ['id' => $startedWithOldMove->id]);
+        $this->assertDatabaseMissing('games', ['id' => $finishedGame->id]);
         $this->assertDatabaseHas('games', ['id' => $activeLobby->id]);
         $this->assertDatabaseHas('games', ['id' => $recentlyStarted->id]);
         $this->assertDatabaseHas('games', ['id' => $startedWithRecentMove->id]);
