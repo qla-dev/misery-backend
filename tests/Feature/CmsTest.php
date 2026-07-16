@@ -453,6 +453,12 @@ class CmsTest extends TestCase
         $this->assertSame(1024, imagesx($saved));
         $this->assertSame(1024, imagesy($saved));
         imagedestroy($saved);
+
+        $this->withServerVariables($server)->postJson('/cms/cards/'.$card->id.'/crop-generated', [
+            'crop_data' => 'data:image/jpeg;base64,'.base64_encode($jpeg),
+        ])->assertOk()
+            ->assertJsonPath('message', 'Square artwork crop saved.')
+            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/card-'.$card->id.'-cropped-'));
     }
 
     public function test_current_artwork_can_be_enhanced_and_kept_below_one_hundred_kilobytes(): void

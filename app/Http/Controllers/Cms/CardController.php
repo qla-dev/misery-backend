@@ -505,6 +505,13 @@ class CardController extends Controller
             'jpeg_bytes' => strlen($jpeg),
         ]);
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'image' => url('/card-images/'.$path),
+                'message' => 'Square artwork crop saved.',
+            ]);
+        }
+
         return redirect($this->cardEditUrl($request, $card))->with('success', 'Square artwork crop saved.');
     }
 
