@@ -353,6 +353,25 @@ class CardSeeder extends Seeder
             $seedPack($normal, 'normal', $events);
             $seedPack($adult, '18-plus', $adultEvents);
             $seedPack($spicy, 'spicy', $spicyEvents);
+
+            // These instructions/demo artworks are also bundled with the app. Keep
+            // their original storage filenames so an existing production artwork
+            // directory can be restored without renaming files after a fresh seed.
+            // Only fill an empty path: never replace artwork edited later in CMS.
+            $legacyArtworkPaths = [
+                'Wash an Envelope Full of Cash' => 'cards/generated/card-238-20260714105620.jpg',
+                'Your Cat Deletes the Final Manuscript' => 'cards/generated/card-272-20260714102356.jpg',
+                'A Cow Bites You on the Butt' => 'cards/generated/card-301-cropped-faccd472-425a-4a1a-9bf9-ab1e00791cbc.jpg',
+            ];
+
+            foreach ($legacyArtworkPaths as $title => $path) {
+                Card::query()
+                    ->where('title', $title)
+                    ->where(function ($query) {
+                        $query->whereNull('image')->orWhere('image', '0');
+                    })
+                    ->update(['image' => $path]);
+            }
         });
     }
 
