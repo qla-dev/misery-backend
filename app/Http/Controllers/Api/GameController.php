@@ -321,14 +321,20 @@ class GameController extends Controller
     public function heartbeat(Request $request, Game $game)
     {
         $data = $request->validate(['user_id' => 'required|integer']);
-        $beforeMembers = $this->memberIds($game);
-        $wasTerminated = (bool) $game->terminated_at;
-        $game = $this->refreshPresence($game, (int) $data['user_id']);
-        $presenceChanged = $beforeMembers !== $this->memberIds($game)
-            || $wasTerminated !== (bool) $game->terminated_at;
-        if ($presenceChanged) {
-            $this->broadcastGameUpdated($game, 'presence.changed');
-        }
+
+        abort_unless(
+            DB::table('members')
+                ->where('game_id', $game->id)
+                ->where('user_id', $data['user_id'])
+                ->exists(),
+            403,
+            'Only room members can send a heartbeat.'
+        );
+
+        DB::table('members')
+            ->where('game_id', $game->id)
+            ->where('user_id', $data['user_id'])
+            ->update(['updated_at' => now()]);
 
         return response()->noContent();
     }
