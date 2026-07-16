@@ -11,6 +11,11 @@ use App\Http\Controllers\Api\StackController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('health', fn () => response()->json([
+    'status' => 'ok',
+    'timestamp' => now()->toIso8601String(),
+])->header('Cache-Control', 'no-store'));
+
 Route::prefix('auth')->group(function () {
     Route::post('google', [AuthController::class, 'google']);
     Route::post('apple', [AuthController::class, 'apple']);
