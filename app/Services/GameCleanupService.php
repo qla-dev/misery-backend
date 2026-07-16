@@ -64,6 +64,28 @@ class GameCleanupService
         ];
     }
 
+    public function forceDelete(Game $game): void
+    {
+        $deletedGame = DB::transaction(function () use ($game): ?array {
+            $lockedGame = Game::query()->lockForUpdate()->find($game->id);
+            if (! $lockedGame) {
+                return null;
+            }
+
+            $details = [
+                'id' => (int) $lockedGame->id,
+                'driver' => (string) ($lockedGame->sync_driver ?: 'polling'),
+            ];
+            $lockedGame->delete();
+
+            return $details;
+        });
+
+        if ($deletedGame) {
+            $this->broadcastDeletion($deletedGame['id'], $deletedGame['driver']);
+        }
+    }
+
     /** @param array<int, int|string> $gameIds */
     private function deleteGames(array $gameIds, callable $stillStale): int
     {

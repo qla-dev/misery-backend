@@ -9,6 +9,7 @@ use App\Http\Resources\GameResource;
 use App\Models\Game;
 use App\Models\Stack;
 use App\Services\RealtimeTransportAllocator;
+use App\Services\GameCleanupService;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
@@ -47,6 +48,7 @@ Route::get('/code/{code}', function (string $code) {
 });
 
 Route::get('/', fn () => response()->file(public_path('dist/index.html')));
+Route::get('/how-to-play', fn () => response()->file(public_path('dist/index.html')));
 Route::get('/cookies', fn () => response()->file(public_path('dist/cookies/index.html')));
 Route::get('/privacy', fn () => response()->file(public_path('dist/privacy/index.html')));
 Route::get('/terms', fn () => response()->file(public_path('dist/terms/index.html')));
@@ -100,6 +102,11 @@ Route::get('/simulator/rooms/{game}', fn (Game $game) => new GameResource($game-
     'moves' => fn ($query) => $query->with(['player', 'card'])->latest(),
     'messages' => fn ($query) => $query->with('user')->latest()->limit(100),
 ])))->middleware('cms.auth')->name('simulator.rooms.show');
+Route::delete('/simulator/rooms/{game}', function (Game $game, GameCleanupService $cleanup) {
+    $cleanup->forceDelete($game);
+
+    return response()->noContent();
+})->middleware('cms.auth')->name('simulator.rooms.destroy');
 Route::get('/card-images/{path}', function (string $path) {
     abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
     abort_unless(Storage::disk('public')->exists($path), 404);

@@ -109,16 +109,9 @@
 }
 
 /* Fold-out rulebook, based on the printed game's white/black/yellow instruction sheet. */
-.rulebook-section{background:#e2b916;color:#111;padding-top:clamp(30px,4vw,54px)}
+.rulebook-section{background:#080808;color:#111;padding-top:clamp(70px,8vw,120px)}
 .rulebook-intro{margin:0 auto 42px;max-width:1240px;text-align:center}
-.rulebook-intro .kicker{color:#5d4900;margin:0 0 12px}
-.rulebook-intro h2{font-family:'Bebas Neue',sans-serif;font-size:clamp(64px,8vw,116px);font-weight:400;letter-spacing:1px;line-height:.82;margin:16px 0 24px}
-.rulebook-intro>p:last-child{font-size:14px;margin:0 auto;max-width:560px}
-.rulebook-logo{margin:0 auto 2px;max-width:430px}
-.rulebook-logo .native-brand{font-size:58px;line-height:58px;pointer-events:none}
-.rulebook-logo .native-brand .brand-main{height:58px}
-.rulebook-logo .native-brand .brand-meter{font-size:58px;line-height:58px;margin-top:-11px}
-.rulebook-logo .native-brand .brand-mascot{height:84px;margin:-45px -4px -14px;transform:translateX(5px);width:39px}
+.rulebook-intro h2{color:#fff;font-family:'Bebas Neue',sans-serif;font-size:clamp(64px,8vw,116px);font-weight:400;letter-spacing:1px;line-height:.82;margin:0}
 .rulebook-paper{background:#f4f3ed;box-shadow:0 28px 75px rgba(57,43,0,.32);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:auto;max-width:1240px;padding:clamp(22px,4vw,55px)}
 .rulebook-block{border-bottom:3px dashed #777;color:#242424;padding:30px 24px 34px}
 .rulebook-block:nth-child(odd){border-right:1px solid #d2d0c8}

@@ -13,7 +13,7 @@ const PLAY_STORE_URL = import.meta.env.VITE_PLAY_STORE_URL || 'https://play.goog
 
 const copy = {
   bs: {
-    nav: ['Igra', 'Misery Lane', 'Karte', 'Preuzmi'], buy: 'Preuzmi', eyebrow: 'PARTY IGRA · 2–8 IGRAČA',
+    nav: ['Igra', 'Kako se igra', 'Karte', 'Preuzmi'], buy: 'Preuzmi', eyebrow: 'PARTY IGRA · 2–8 IGRAČA',
     heroA: 'KOLIKO LOŠE', heroB: 'JE LOŠE?', hero: 'Složi životne katastrofe na svoju Traku Bijede. Pogriješi, i neko će ti ukrasti kartu ispred nosa.',
     play: 'Isprobaj igru', box: 'Preuzmi aplikaciju', scroll: 'Skrolaj prema nesreći',
     labTag: 'TESTIRAJ INSTINKT', labTitle: 'Gdje ova nesreća pripada?', labText: 'Pomjeri kartu na mjesto koje osjećaš. Onda otkrij stvarnu Stopu patnje.',
@@ -29,7 +29,7 @@ const copy = {
     name: 'Ime i prezime', email: 'Email', phone: 'Telefon', address: 'Adresa za dostavu', quantity: 'Količina', total: 'Ukupno', submit: 'Potvrdi narudžbu', sending: 'Šaljem…', done: 'Narudžba je zaprimljena.', doneText: 'Javit ćemo se prije slanja radi potvrde adrese i dostave.',
   },
   en: {
-    nav: ['Game', 'Misery Lane', 'Cards', 'Download'], buy: 'Download', eyebrow: 'PARTY GAME · 2–8 PLAYERS',
+    nav: ['Game', 'How to Play', 'Cards', 'Download'], buy: 'Download', eyebrow: 'PARTY GAME · 2–8 PLAYERS',
     heroA: 'HOW BAD', heroB: 'IS BAD?', hero: 'Build a timeline of life disasters on your Misery Lane. Miss the spot, and someone steals the card from under you.',
     play: 'Try the game', box: 'Download the app', scroll: 'Scroll toward misery',
     labTag: 'TEST YOUR INSTINCT', labTitle: 'Where does this disaster belong?', labText: 'Move the card where your gut tells you. Then reveal the real Misery Rate.',
@@ -186,7 +186,7 @@ function RuleLane({ cards, hidden = false, lang }) {
 function WebRulebook({ cards, lang }) {
   const bs = lang === 'bs';
   return <section className="how rulebook-section" id="how">
-    <div className="rulebook-intro"><div className="rulebook-logo"><Brand/></div><p className="kicker">{bs?'KAKO SE IGRA':'HOW TO PLAY'}</p><p>{bs?'Originalni izgled knjižice pravila, prilagođen igri u aplikaciji.':'The original rulebook treatment, rebuilt for the game in your pocket.'}</p></div>
+    <div className="rulebook-intro"><h2>{bs?'KAKO SE IGRA':'HOW TO PLAY'}</h2></div>
     <div className="rulebook-paper">
       <article className="rulebook-block rulebook-wide">
         <RuleBand number="1">{bs?'ŠTA POKUŠAVAM POSTIĆI?':'WHAT AM I TRYING TO ACCOMPLISH?'}</RuleBand>
@@ -294,7 +294,8 @@ function LegalPage({ type, lang, goHome }) {
 
 export default function App() {
   const initialPath = window.location.pathname.replace(/\/$/, '') || '/';
-  const [page, setPage] = useState(initialPath === '/privacy' ? 'privacy' : initialPath === '/terms' ? 'terms' : initialPath === '/cookies' ? 'cookies' : 'home');
+  const pageFromPath = path => path.startsWith('/privacy') ? 'privacy' : path.startsWith('/terms') ? 'terms' : path.startsWith('/cookies') ? 'cookies' : path.startsWith('/how-to-play') ? 'how-to-play' : 'home';
+  const [page, setPage] = useState(pageFromPath(initialPath));
   const [lang, setLang] = useState('en');
   const [menu, setMenu] = useState(false);
   const [scenarioIndex, setScenarioIndex] = useState(1);
@@ -320,9 +321,9 @@ export default function App() {
     : cards;
   const delta = Math.abs(guess - scenario.score);
   const verdict = delta < 8 ? (lang==='bs'?'ZASTRAŠUJUĆE PRECIZNO':'SCARILY ACCURATE') : delta < 20 ? (lang==='bs'?'BLIZU. DOVOLJNO BLIZU.':'CLOSE. UNCOMFORTABLY CLOSE.') : (lang==='bs'?'TVOM INSTINKTU TREBA POMOĆ':'YOUR INSTINCT NEEDS HELP');
-  const links = useMemo(() => [['#game',t.nav[0]],['#how',t.nav[1]],['#cards',t.nav[2]],['#shop',t.nav[3]]], [t]);
+  const links = useMemo(() => [['/#game',t.nav[0]],['/how-to-play',t.nav[1]],['/#cards',t.nav[2]],['/#shop',t.nav[3]]], [t]);
   useEffect(() => {
-    const titles = { home: 'Misery Meter: The party game of terrible decisions', privacy: 'Privacy Policy | Misery Meter', terms: 'Terms of Use | Misery Meter', cookies: 'Cookie Policy | Misery Meter' };
+    const titles = { home: 'Misery Meter: The party game of terrible decisions', 'how-to-play': 'How to Play | Misery Meter', privacy: 'Privacy Policy | Misery Meter', terms: 'Terms of Use | Misery Meter', cookies: 'Cookie Policy | Misery Meter' };
     document.title = titles[page];
     document.documentElement.lang = lang;
   }, [lang, page]);
@@ -339,13 +340,16 @@ export default function App() {
       .catch(error => console.warn('[Landing] Real cards unavailable; using bundled fallback cards.', error));
     return () => { active = false; };
   }, []);
-  useEffect(() => { const onPop=()=>setPage(location.pathname.startsWith('/privacy')?'privacy':location.pathname.startsWith('/terms')?'terms':location.pathname.startsWith('/cookies')?'cookies':'home'); addEventListener('popstate',onPop); return()=>removeEventListener('popstate',onPop); }, []);
+  useEffect(() => { const onPop=()=>setPage(pageFromPath(location.pathname)); addEventListener('popstate',onPop); return()=>removeEventListener('popstate',onPop); }, []);
   function navigate(next) { const path=next==='home'?'/':`/${next}`; history.pushState({},'',path); setPage(next); scrollTo(0,0); }
   function nextScenario() { setScenarioIndex(x=>(x+1)%scenarioPool.length); setGuess(Math.round(20+Math.random()*60)); setRevealed(false); }
-  if (page !== 'home') return <LegalPage type={page} lang={lang} goHome={()=>navigate('home')}/>;
+  const siteHeader = <header className="site-header"><Brand/><nav className={menu?'open':''}>{links.map(([href,label])=><a href={href} key={href} onClick={()=>setMenu(false)}>{label}</a>)}</nav><div className="header-actions"><button className="language" onClick={()=>setLang(lang==='bs'?'en':'bs')}><Globe2 size={15}/>{lang==='bs'?'BS':'EN'}</button><StoreButtons compact lang={lang} platformAware/><button className="menu-button" onClick={()=>setMenu(!menu)}>{menu?<X/>:<Menu/>}</button></div></header>;
+  const siteFooter = <footer><div className="footer-top"><Brand/><p>{lang==='bs'?'Party igra o tome ko najbolje razumije koliko život može biti loš.':'The party game about who truly understands how bad life can get.'}</p><StoreButtons compact lang={lang}/></div><div className="footer-bottom"><span>© 2026 MISERY METER · {t.rights}</span><div><button onClick={()=>navigate('privacy')}>{t.privacy}</button><button onClick={()=>navigate('terms')}>{t.terms}</button><button onClick={()=>navigate('cookies')}>{t.cookies}</button><a href="https://qla.dev" target="_blank" rel="noreferrer">qla.dev ↗</a></div></div></footer>;
+  if (page === 'privacy' || page === 'terms' || page === 'cookies') return <LegalPage type={page} lang={lang} goHome={()=>navigate('home')}/>;
+  if (page === 'how-to-play') return <div className="site-shell">{siteHeader}<main><WebRulebook cards={galleryCards} lang={lang}/></main>{siteFooter}</div>;
 
   return <div className="site-shell">
-    <header className="site-header"><Brand/><nav className={menu?'open':''}>{links.map(([href,label])=><a href={href} key={href} onClick={()=>setMenu(false)}>{label}</a>)}</nav><div className="header-actions"><button className="language" onClick={()=>setLang(lang==='bs'?'en':'bs')}><Globe2 size={15}/>{lang==='bs'?'BS':'EN'}</button><StoreButtons compact lang={lang} platformAware/><button className="menu-button" onClick={()=>setMenu(!menu)}>{menu?<X/>:<Menu/>}</button></div></header>
+    {siteHeader}
 
     <main>
       <section className="hero" id="game"><div className="hero-grid"/><div className="hero-copy"><p className="kicker"><span/> {t.eyebrow}</p><h1><span>{t.heroA}</span><em>{t.heroB}</em></h1><p className="hero-lead">{t.hero}</p><div className="hero-buttons"><a className="primary-button" href="#playground">{t.play}<Zap size={18}/></a><StoreButtons lang={lang} platformAware/></div><div className="hero-stats"><div><b>100+</b><span>CARDS</span></div><div><b>2–8</b><span>PLAYERS</span></div><div><b>20′</b><span>CHAOS</span></div></div></div><div className="hero-deck"><div className="halo"/><GameCard card={scenarioPool[2 % scenarioPool.length]} className="card-back-left"/><GameCard card={scenarioPool[0]} className="card-back-right"/><GameCardBack className="hero-card"/><div className="floating-score"><span>SECRET</span><b>?.??</b><small>MISERY RATE</small></div></div><a className="scroll-cue" href="#playground"><span>{t.scroll}</span><ArrowDown/></a></section>
@@ -363,6 +367,6 @@ export default function App() {
       <section className="rules-faq"><div className="rules-card"><div><p className="kicker">FULL RULEBOOK · MISERY LANE</p><h2>{t.rules}</h2><p>{lang==='bs'?'Počni s tri poredane karte na svom Misery Laneu. Na potezu postavi novu kartu između dvije ocjene. Tačno? Zadrži je. Pogrešno? Sljedeći igrač može ukrasti. Prvi koji izgradi ciljani Misery Lane pobjeđuje.':'Start with three ordered cards on your Misery Lane. On your turn, place a new one between two scores. Correct? Keep it. Wrong? The next player can steal. First to build the target Misery Lane wins.'}</p></div><div className="rule-lane"><span>03.7</span><i/><span>?</span><i/><span>55.5</span><i/><span>72.4</span></div></div><div className="faq"><p className="kicker">FAQ</p><h2>{t.faq}</h2>{faqs.map(([q,a],i)=><article className={faqOpen===i?'open':''} key={q}><button onClick={()=>setFaqOpen(faqOpen===i?-1:i)}><span>{lang==='bs'?q:[['How many can play?'],['How long is a game?'],['Where can I play?'],['What happens when I am wrong?']][i]}</span><ChevronDown/></button><div><p>{lang==='bs'?a:[['Two to eight players in an online multiplayer room.'],['Usually 20–40 minutes depending on player count and target lane length.'],['Misery Meter is available for iOS and Android with online multiplayer and premium decks.'],['The next player gets a chance to steal it by placing it correctly in their lane.']][i]}</p></div></article>)}</div></section>
     </main>
 
-    <footer><div className="footer-top"><Brand/><p>{lang==='bs'?'Party igra o tome ko najbolje razumije koliko život može biti loš.':'The party game about who truly understands how bad life can get.'}</p><StoreButtons compact lang={lang}/></div><div className="footer-bottom"><span>© 2026 MISERY METER · {t.rights}</span><div><button onClick={()=>navigate('privacy')}>{t.privacy}</button><button onClick={()=>navigate('terms')}>{t.terms}</button><button onClick={()=>navigate('cookies')}>{t.cookies}</button><a href="https://qla.dev" target="_blank" rel="noreferrer">qla.dev ↗</a></div></div></footer>
+    {siteFooter}
   </div>;
 }
