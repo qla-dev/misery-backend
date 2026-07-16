@@ -29,6 +29,7 @@ class CmsTest extends TestCase
             ->assertSee('Bad day')
             ->assertSee('All packs')
             ->assertSee('Export')
+            ->assertSee('Generate')
             ->assertSee('CARD_EXPORT_WIDTH=1200', false);
         $this->withServerVariables($server)->get('/cms/native-card-artwork')
             ->assertOk()
@@ -191,6 +192,12 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)->get('/cms/cards/'.$card->id.'/edit')
             ->assertOk()
             ->assertSee('generatedCropForm');
+
+        $inlineCard = Card::create(['title' => 'Inline generation', 'score' => 14, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $this->withServerVariables($server)->postJson('/cms/cards/'.$inlineCard->id.'/generate')
+            ->assertOk()
+            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/card-'.$inlineCard->id.'-'));
+        $this->assertNotSame('0', $inlineCard->fresh()->image);
         Http::assertSent(function ($request) {
             $reference = $request['input_references'][0]['image_url']['url'];
             $referencePng = base64_decode(str_replace('data:image/png;base64,', '', $reference), true);

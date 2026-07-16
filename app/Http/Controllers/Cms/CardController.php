@@ -256,7 +256,7 @@ class CardController extends Controller
         if (! config('services.openrouter.key')) {
             Log::warning('CMS artwork generation stopped: API key missing', $logContext);
 
-            return back()->withErrors(['generation' => "OPENROUTER_API_KEY is not configured on the backend. [Generation: {$generationId}]"]);
+            return $this->artworkGenerationError($request, "OPENROUTER_API_KEY is not configured on the backend. [Generation: {$generationId}]");
         }
         $prompt = implode("\n", [
             'Use case: stylized-concept',
@@ -365,15 +365,13 @@ class CardController extends Controller
             ]);
 
             if (! $this->isInsufficientCreditError($error, $message)) {
-                return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
+                return $this->artworkGenerationError($request, $message." [Generation: {$generationId}]");
             }
 
             if (! config('services.gemini_fallback.key')) {
                 Log::warning('CMS artwork Gemini fallback unavailable: API key missing', $logContext);
 
-                return back()->withErrors([
-                    'generation' => $message." Gemini fallback is not configured; add FALLBACK_GEMINI_API_KEY. [Generation: {$generationId}]",
-                ]);
+                return $this->artworkGenerationError($request, $message." Gemini fallback is not configured; add FALLBACK_GEMINI_API_KEY. [Generation: {$generationId}]");
             }
 
             Log::warning('CMS artwork switching to direct Gemini fallback', $logContext + [
@@ -395,9 +393,7 @@ class CardController extends Controller
                     'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 ]);
 
-                return back()->withErrors([
-                    'generation' => 'OpenRouter has insufficient credit and Gemini fallback failed: '.($fallbackMessage ?: 'Unknown Gemini error')." [Generation: {$generationId}]",
-                ]);
+                return $this->artworkGenerationError($request, 'OpenRouter has insufficient credit and Gemini fallback failed: '.($fallbackMessage ?: 'Unknown Gemini error')." [Generation: {$generationId}]");
             }
         } catch (Throwable $error) {
             Log::error('CMS artwork generation could not start', $logContext + [
@@ -407,7 +403,7 @@ class CardController extends Controller
 
             $message = $error->getMessage() ?: 'Artwork generation could not be started.';
 
-            return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
+            return $this->artworkGenerationError($request, $message." [Generation: {$generationId}]");
         }
 
         try {
@@ -441,7 +437,7 @@ class CardController extends Controller
 
             $message = $error->getMessage() ?: 'Generated artwork could not be saved.';
 
-            return back()->withErrors(['generation' => $message." [Generation: {$generationId}]"]);
+            return $this->artworkGenerationError($request, $message." [Generation: {$generationId}]");
         }
 
         Log::info('CMS artwork generation completed', $logContext + [
@@ -455,8 +451,17 @@ class CardController extends Controller
             ? ' Cost: $'.number_format($generationCost, 6, '.', '').'.'
             : '';
 
+        $message = 'Black-background JPEG artwork generated via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').'. Adjust the square crop, then save it.'.$costMessage." [Generation: {$generationId}]";
+        if ($request->expectsJson()) {
+            return response()->json([
+                'image' => url('/card-images/'.$path),
+                'message' => $message,
+                'generation_id' => $generationId,
+            ]);
+        }
+
         return back()
-            ->with('success', 'Black-background JPEG artwork generated via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').'. Adjust the square crop, then save it.'.$costMessage." [Generation: {$generationId}]")
+            ->with('success', $message)
             ->with('crop_generated_artwork', [
                 'card_id' => $card->id,
                 'path' => $path,
@@ -597,6 +602,13 @@ class CardController extends Controller
         }
 
         return null;
+    }
+
+    private function artworkGenerationError(Request $request, string $message)
+    {
+        return $request->expectsJson()
+            ? response()->json(['message' => $message], 502)
+            : back()->withErrors(['generation' => $message]);
     }
 
     public function generateSvg(Request $request, Card $card)
