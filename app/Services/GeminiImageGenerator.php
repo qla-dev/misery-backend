@@ -63,7 +63,6 @@ class GeminiImageGenerator
                 'response_format' => [
                     'type' => 'image',
                     'mime_type' => 'image/jpeg',
-                    'delivery' => 'inline',
                     'aspect_ratio' => $aspectRatio,
                     'image_size' => '2K',
                 ],

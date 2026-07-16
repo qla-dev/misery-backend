@@ -484,6 +484,51 @@ class CardController extends Controller
         return redirect()->route('cms.cards.edit', $card)->with('success', 'Square artwork crop saved.');
     }
 
+    public function enhanceArtwork(Card $card)
+    {
+        $previousPath = (string) $card->image;
+        abort_if($previousPath === '' || $previousPath === '0' || Str::startsWith($previousPath, ['http://', 'https://']), 422, 'Only locally stored card artwork can be enhanced.');
+
+        $storagePath = preg_replace('#^storage/#', '', ltrim($previousPath, '/'));
+        abort_unless(is_string($storagePath) && Storage::disk('public')->exists($storagePath), 404, 'The current artwork could not be found.');
+
+        $original = Storage::disk('public')->get($storagePath);
+        abort_unless(function_exists('imagecreatefromstring'), 422, 'GD is unavailable for artwork enhancement.');
+        $source = @imagecreatefromstring($original);
+        abort_unless($source !== false, 422, 'The current artwork is not a valid image.');
+
+        $width = imagesx($source);
+        $height = imagesy($source);
+        if ($width < 128 || $height < 128 || $width !== $height) {
+            imagedestroy($source);
+            abort(422, 'Artwork must be a square image of at least 128 pixels before enhancement.');
+        }
+
+        $enhanced = $this->enhanceCardArtwork($source);
+        imagedestroy($source);
+        $jpeg = $this->encodeCardJpeg($enhanced);
+        imagedestroy($enhanced);
+        abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 422, 'Enhanced artwork could not be optimized below 100 KB.');
+
+        $path = 'cards/generated/card-'.$card->id.'-enhanced-'.Str::uuid().'.jpg';
+        Storage::disk('public')->put($path, $jpeg);
+        abort_unless(Storage::disk('public')->exists($path), 500, 'Enhanced artwork was not found after writing it to storage.');
+
+        $card->update(['image' => $path]);
+        $this->deleteManagedImage($previousPath);
+
+        Log::info('CMS card artwork enhanced', [
+            'card_id' => $card->id,
+            'source_dimensions' => $width.'x'.$height,
+            'source_bytes' => strlen($original),
+            'jpeg_bytes' => strlen($jpeg),
+            'storage_path' => $path,
+        ]);
+
+        return redirect()->route('cms.cards.edit', $card)
+            ->with('success', 'Artwork enhanced to 1024 × 1024 and optimized below 100 KB.');
+    }
+
     private function responseCost(array $response): ?float
     {
         foreach (['usage.cost', 'data.0.usage.cost', 'cost'] as $path) {
@@ -942,6 +987,35 @@ class CardController extends Controller
                 break;
             }
         }
+
+        return $result;
+    }
+
+    private function enhanceCardArtwork(\GdImage $source): \GdImage
+    {
+        $sourceWidth = imagesx($source);
+        $sourceHeight = imagesy($source);
+        $workingSize = 2048;
+        $working = imagecreatetruecolor($workingSize, $workingSize);
+        $black = imagecolorallocate($working, 0, 0, 0);
+        imagefill($working, 0, 0, $black);
+        imagecopyresampled($working, $source, 0, 0, 0, 0, $workingSize, $workingSize, $sourceWidth, $sourceHeight);
+
+        // A gentle supersampled cleanup removes JPEG/crop stair-stepping without
+        // inventing details or changing the generated composition.
+        imagefilter($working, IMG_FILTER_SMOOTH, 1);
+        imagefilter($working, IMG_FILTER_CONTRAST, -3);
+        imageconvolution($working, [
+            [0, -0.12, 0],
+            [-0.12, 1.48, -0.12],
+            [0, -0.12, 0],
+        ], 1, 0);
+
+        $result = imagecreatetruecolor(1024, 1024);
+        $resultBlack = imagecolorallocate($result, 0, 0, 0);
+        imagefill($result, 0, 0, $resultBlack);
+        imagecopyresampled($result, $working, 0, 0, 0, 0, 1024, 1024, $workingSize, $workingSize);
+        imagedestroy($working);
 
         return $result;
     }

@@ -410,6 +410,50 @@ class CmsTest extends TestCase
         imagedestroy($saved);
     }
 
+    public function test_current_artwork_can_be_enhanced_and_kept_below_one_hundred_kilobytes(): void
+    {
+        Storage::fake('public');
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $originalPath = 'cards/generated/card-before-enhancement.jpg';
+        $image = imagecreatetruecolor(256, 256);
+        $black = imagecolorallocate($image, 0, 0, 0);
+        $yellow = imagecolorallocate($image, 250, 204, 21);
+        imagefill($image, 0, 0, $black);
+        imagesetthickness($image, 16);
+        imageline($image, 20, 236, 236, 20, $yellow);
+        ob_start();
+        imagejpeg($image, null, 60);
+        $original = ob_get_clean();
+        imagedestroy($image);
+        Storage::disk('public')->put($originalPath, $original);
+
+        $card = Card::create([
+            'title' => 'Flat tire',
+            'score' => 12,
+            'image' => $originalPath,
+            'deck' => 'normal',
+            'stack_id' => $stack->id,
+        ]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)
+            ->post('/cms/cards/'.$card->id.'/enhance-artwork')
+            ->assertRedirect(route('cms.cards.edit', $card))
+            ->assertSessionHas('success', 'Artwork enhanced to 1024 × 1024 and optimized below 100 KB.');
+
+        $enhancedPath = $card->fresh()->image;
+        $this->assertStringContainsString('-enhanced-', $enhancedPath);
+        Storage::disk('public')->assertMissing($originalPath);
+        Storage::disk('public')->assertExists($enhancedPath);
+        $enhancedBytes = Storage::disk('public')->get($enhancedPath);
+        $this->assertLessThanOrEqual(100 * 1024, strlen($enhancedBytes));
+        $enhanced = imagecreatefromstring($enhancedBytes);
+        $this->assertNotFalse($enhanced);
+        $this->assertSame(1024, imagesx($enhanced));
+        $this->assertSame(1024, imagesy($enhanced));
+        imagedestroy($enhanced);
+    }
+
     public function test_generate_action_returns_to_cms_when_provider_returns_no_image(): void
     {
         config(['services.openrouter.key' => 'test-key']);

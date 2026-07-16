@@ -83,6 +83,7 @@ class ScreenshotMakerTest extends TestCase
                 && $request['model'] === 'gemini-image-test'
                 && $request['response_format']['type'] === 'image'
                 && $request['response_format']['aspect_ratio'] === '9:16'
+                && ! isset($request['response_format']['delivery'])
                 && $input['type'] === 'user_input'
                 && str_contains($content[0]['text'], 'Misery-yellow (#FACC15) rainbow')
                 && collect($content)->where('type', 'text')->count() === 1
