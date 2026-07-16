@@ -38,9 +38,12 @@ class CardController extends Controller
         return view('cms.cards.form', ['card' => new Card, 'stacks' => Stack::orderBy('name')->get()]);
     }
 
-    public function edit(Card $card)
+    public function edit(Request $request, Card $card)
     {
-        return view('cms.cards.form', compact('card') + ['stacks' => Stack::orderBy('name')->get()]);
+        return view('cms.cards.form', compact('card') + [
+            'stacks' => Stack::orderBy('name')->get(),
+            'cardsReturnUrl' => $this->cardsReturnUrl($request),
+        ]);
     }
 
     public function store(Request $request)
@@ -56,11 +59,26 @@ class CardController extends Controller
         $previousImage = $card->image;
         $card->update($this->validated($request));
         if (! $request->hasFile('image_upload') && $previousImage !== $card->image) {
+            $card->update(['artwork_enhanced' => false]);
             $this->deleteManagedImage($previousImage);
         }
         $this->storeUpload($request, $card);
 
         return back()->with('success', 'Card saved.');
+    }
+
+    public function updateScore(Request $request, Card $card)
+    {
+        $data = $request->validate([
+            'score' => ['required', 'numeric', 'min:0', 'max:100', 'decimal:0,2'],
+        ]);
+
+        $card->update(['score' => $data['score']]);
+
+        return response()->json([
+            'score' => (float) $card->score,
+            'formatted_score' => number_format((float) $card->score, 2, '.', ''),
+        ]);
     }
 
     public function destroy(Card $card)
@@ -414,7 +432,7 @@ class CardController extends Controller
             Storage::disk('public')->put($path, $jpeg);
             abort_unless(Storage::disk('public')->exists($path), 500, 'Generated PNG was not found after writing it to storage.');
             $this->deleteManagedImage($card->image);
-            $card->update(['image' => $path]);
+            $card->update(['image' => $path, 'artwork_enhanced' => false]);
         } catch (Throwable $error) {
             Log::error('CMS artwork generation image processing failed', $logContext + [
                 'exception' => $error,
@@ -472,7 +490,7 @@ class CardController extends Controller
         abort_unless(Storage::disk('public')->exists($path), 500, 'The cropped artwork was not found after writing it to storage.');
 
         $previousImage = $card->image;
-        $card->update(['image' => $path]);
+        $card->update(['image' => $path, 'artwork_enhanced' => false]);
         $this->deleteManagedImage($previousImage);
 
         Log::info('CMS generated artwork crop saved', [
@@ -482,10 +500,10 @@ class CardController extends Controller
             'jpeg_bytes' => strlen($jpeg),
         ]);
 
-        return redirect()->route('cms.cards.edit', $card)->with('success', 'Square artwork crop saved.');
+        return redirect($this->cardEditUrl($request, $card))->with('success', 'Square artwork crop saved.');
     }
 
-    public function enhanceArtwork(Card $card, GeminiImageGenerator $generator)
+    public function enhanceArtwork(Request $request, Card $card, GeminiImageGenerator $generator)
     {
         $previousPath = (string) $card->image;
         abort_if($previousPath === '' || $previousPath === '0' || Str::startsWith($previousPath, ['http://', 'https://']), 422, 'Only locally stored card artwork can be enhanced.');
@@ -535,15 +553,18 @@ class CardController extends Controller
                 'exception' => $error,
             ]);
 
-            return redirect()->route('cms.cards.edit', $card)
-                ->withErrors(['generation' => 'Artwork enhancement failed: '.($error->getMessage() ?: 'Unknown image provider error.')]);
+            $message = 'Artwork enhancement failed: '.($error->getMessage() ?: 'Unknown image provider error.');
+
+            return $request->expectsJson()
+                ? response()->json(['message' => $message], 502)
+                : redirect($this->cardEditUrl($request, $card))->withErrors(['generation' => $message]);
         }
 
         $path = 'cards/generated/card-'.$card->id.'-enhanced-'.Str::uuid().'.jpg';
         Storage::disk('public')->put($path, $jpeg);
         abort_unless(Storage::disk('public')->exists($path), 500, 'Enhanced artwork was not found after writing it to storage.');
 
-        $card->update(['image' => $path]);
+        $card->update(['image' => $path, 'artwork_enhanced' => true]);
         $this->deleteManagedImage($previousPath);
 
         Log::info('CMS card artwork enhanced', [
@@ -556,8 +577,14 @@ class CardController extends Controller
             'model' => $generated['model'],
         ]);
 
-        return redirect()->route('cms.cards.edit', $card)
-            ->with('success', 'Artwork enhanced with '.$generated['provider'].' using '.$generated['model'].', then optimized to 1024 × 1024 below 100 KB.');
+        $message = 'Artwork enhanced with '.$generated['provider'].' using '.$generated['model'].', then optimized to 1024 × 1024 below 100 KB.';
+
+        return $request->expectsJson()
+            ? response()->json([
+                'image' => url('/card-images/'.$path),
+                'message' => $message,
+            ])
+            : redirect($this->cardEditUrl($request, $card))->with('success', $message);
     }
 
     private function responseCost(array $response): ?float
@@ -1183,6 +1210,37 @@ class CardController extends Controller
         return $data;
     }
 
+    private function cardsReturnUrl(Request $request): string
+    {
+        $default = route('cms.cards.index');
+        $candidate = $request->string('return')->toString();
+        if ($candidate === '') {
+            return $default;
+        }
+
+        $target = parse_url($candidate);
+        $index = parse_url($default);
+        if ($target === false
+            || ($target['path'] ?? '') !== ($index['path'] ?? '')
+            || (isset($target['host']) && strcasecmp($target['host'], (string) ($index['host'] ?? '')) !== 0)
+            || (isset($target['scheme']) && strcasecmp($target['scheme'], (string) ($index['scheme'] ?? '')) !== 0)
+            || (isset($target['port']) && $target['port'] !== ($index['port'] ?? null))) {
+            return $default;
+        }
+
+        return $candidate;
+    }
+
+    private function cardEditUrl(Request $request, Card $card): string
+    {
+        $parameters = ['card' => $card];
+        if ($request->string('return')->isNotEmpty()) {
+            $parameters['return'] = $this->cardsReturnUrl($request);
+        }
+
+        return route('cms.cards.edit', $parameters);
+    }
+
     private function storeUpload(Request $request, Card $card): void
     {
         if (! $request->hasFile('image_upload')) {
@@ -1190,7 +1248,7 @@ class CardController extends Controller
         }
         $this->deleteManagedImage($card->image);
         $path = $request->file('image_upload')->store('cards/uploads', 'public');
-        $card->update(['image' => $path]);
+        $card->update(['image' => $path, 'artwork_enhanced' => false]);
     }
 
     private function deleteManagedImage(?string $path): void

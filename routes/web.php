@@ -115,6 +115,7 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
         ]);
     })->name('native-card-artwork');
     Route::resource('cards', CmsCardController::class)->except('show');
+    Route::patch('cards/{card}/score', [CmsCardController::class, 'updateScore'])->name('cards.score');
     Route::post('cards/{card}/generate', [CmsCardController::class, 'generate'])->name('cards.generate');
     Route::post('cards/{card}/translate-bs', [CmsCardController::class, 'translateToBosnian'])->name('cards.translate-bs');
     Route::post('cards/{card}/crop-generated', [CmsCardController::class, 'saveGeneratedCrop'])->name('cards.crop-generated');

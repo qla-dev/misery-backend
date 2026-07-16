@@ -28,7 +28,7 @@ class CmsTest extends TestCase
             ->assertOk()
             ->assertSee('Bad day')
             ->assertSee('All packs')
-            ->assertSee('Export HQ PNG')
+            ->assertSee('Export')
             ->assertSee('CARD_EXPORT_WIDTH=1200', false);
         $this->withServerVariables($server)->get('/cms/native-card-artwork')
             ->assertOk()
@@ -54,6 +54,44 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)->post('/cms/cards/'.$card->id.'/status', ['status' => 0])
             ->assertRedirect()->assertSessionHas('success', 'Card returned to draft.');
         $this->assertFalse($card->fresh()->status);
+    }
+
+    public function test_card_editor_back_link_preserves_the_filtered_cards_url(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create(['title' => 'Filtered card', 'score' => 22.22, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+        $filteredUrl = url('/cms/cards').'?stack='.$stack->id.'&status=1&q=Filtered&page=3';
+        $editorUrl = route('cms.cards.edit', ['card' => $card, 'return' => $filteredUrl]);
+
+        $this->withServerVariables($server)->get($editorUrl)
+            ->assertOk()
+            ->assertSee('href="'.e($filteredUrl).'"', false);
+
+        $this->withServerVariables($server)->get(route('cms.cards.edit', ['card' => $card, 'return' => 'https://example.com/cms/cards']))
+            ->assertOk()
+            ->assertSee('href="'.route('cms.cards.index').'"', false)
+            ->assertDontSee('href="https://example.com/cms/cards"', false);
+    }
+
+    public function test_cms_can_update_only_a_card_score_inline(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create(['title' => 'Inline edit', 'subtitle' => 'Keep me', 'score' => 22.22, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->patchJson('/cms/cards/'.$card->id.'/score', ['score' => 37.45])
+            ->assertOk()
+            ->assertJson(['score' => 37.45, 'formatted_score' => '37.45']);
+
+        $card->refresh();
+        $this->assertSame(37.45, (float) $card->score);
+        $this->assertSame('Inline edit', $card->title);
+        $this->assertSame('Keep me', $card->subtitle);
+
+        $this->withServerVariables($server)->patchJson('/cms/cards/'.$card->id.'/score', ['score' => 101])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('score');
     }
 
     public function test_cms_updates_stack_presentation_exposed_to_native_clients(): void
@@ -449,11 +487,13 @@ class CmsTest extends TestCase
         $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
 
         $this->withServerVariables($server)
-            ->post('/cms/cards/'.$card->id.'/enhance-artwork')
-            ->assertRedirect(route('cms.cards.edit', $card))
-            ->assertSessionHas('success', 'Artwork enhanced with Gemini via OpenRouter using google/gemini-image-test, then optimized to 1024 × 1024 below 100 KB.');
+            ->postJson('/cms/cards/'.$card->id.'/enhance-artwork')
+            ->assertOk()
+            ->assertJsonPath('message', 'Artwork enhanced with Gemini via OpenRouter using google/gemini-image-test, then optimized to 1024 × 1024 below 100 KB.')
+            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/card-'.$card->id.'-enhanced-'));
 
         $enhancedPath = $card->fresh()->image;
+        $this->assertTrue($card->fresh()->artwork_enhanced);
         $this->assertStringContainsString('-enhanced-', $enhancedPath);
         Storage::disk('public')->assertMissing($originalPath);
         Storage::disk('public')->assertExists($enhancedPath);
@@ -469,6 +509,11 @@ class CmsTest extends TestCase
             && $request['aspect_ratio'] === '1:1'
             && str_contains($request['prompt'], 'image restoration, not a redesign')
             && str_starts_with($request['input_references'][0]['image_url']['url'], 'data:image/jpeg;base64,'));
+
+        $this->withServerVariables($server)->get('/cms/cards')
+            ->assertOk()
+            ->assertSee('ENHANCED')
+            ->assertSee('Enhance');
     }
 
     public function test_generate_action_returns_to_cms_when_provider_returns_no_image(): void
