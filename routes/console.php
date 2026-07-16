@@ -5,7 +5,6 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -17,8 +16,6 @@ Artisan::command('games:cleanup', function (GameCleanupService $cleanup) {
 
     return self::SUCCESS;
 })->purpose('Delete stale lobby games and started games without recent moves');
-
-Schedule::command('games:cleanup')->everyFiveMinutes()->withoutOverlapping();
 
 Artisan::command('rulebook:generate-illustration {--force : Replace the existing generated asset}', function () {
     $key = config('services.openrouter.key');

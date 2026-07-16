@@ -90,7 +90,12 @@ class GamePresenceTest extends TestCase
 
         $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $guest->id])
             ->assertStatus(409)
-            ->assertJsonPath('message', 'Lobby members are not subject to inactivity removal.');
+            ->assertJsonPath('message', 'Inactivity removal only applies after the game has started.');
+
+        $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $host->id])
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Inactivity removal only applies after the game has started.');
+        $this->assertNull($game->fresh()->terminated_at);
     }
 
     public function test_host_leaving_intentionally_terminates_game(): void
@@ -164,6 +169,27 @@ class GamePresenceTest extends TestCase
         $this->postJson("/api/games/{$game->id}/kick", ['user_id' => $host->id, 'player_id' => $guest->id])
             ->assertUnprocessable();
         $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
+    }
+
+    public function test_only_the_host_can_delete_an_unstarted_lobby(): void
+    {
+        $host = User::factory()->create();
+        $guest = User::factory()->create();
+        $game = Game::create(['code' => 'DELETE12', 'owner_id' => $host->id, 'started' => false]);
+        $game->members()->attach([$host->id, $guest->id]);
+
+        $this->deleteJson("/api/games/{$game->id}", ['user_id' => $guest->id])->assertForbidden();
+        $this->assertDatabaseHas('games', ['id' => $game->id]);
+
+        $this->deleteJson("/api/games/{$game->id}", ['user_id' => $host->id])->assertNoContent();
+        $this->assertDatabaseMissing('games', ['id' => $game->id]);
+
+        $startedGame = Game::create(['code' => 'NODELETE', 'owner_id' => $host->id, 'started' => true]);
+        $startedGame->members()->attach($host->id);
+        $this->deleteJson("/api/games/{$startedGame->id}", ['user_id' => $host->id])
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'A room cannot be deleted after the game has started.');
+        $this->assertDatabaseHas('games', ['id' => $startedGame->id]);
     }
 
     public function test_guest_with_active_native_pro_can_lock_their_lobby_and_hide_it_from_public_games(): void

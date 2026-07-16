@@ -451,8 +451,12 @@ class GameController extends Controller
         return $this->full($game);
     }
 
-    public function destroy(Game $game)
+    public function destroy(Request $request, Game $game)
     {
+        $data = $request->validate(['user_id' => 'required|integer']);
+        abort_unless((int) $data['user_id'] === (int) $game->owner_id, 403, 'Only the host can delete this room.');
+        abort_if($game->started, 409, 'A room cannot be deleted after the game has started.');
+
         $gameId = (int) $game->id;
         $driver = $game->sync_driver;
         $game->delete();
@@ -676,9 +680,9 @@ class GameController extends Controller
                 return $this->full($game);
             }
 
+            abort_unless($game->started, 409, 'Inactivity removal only applies after the game has started.');
             $originalMemberIds = $this->memberIds($game);
             abort_unless(in_array($userId, $originalMemberIds, true), 404, 'Player is not in this room.');
-            abort_if(! $game->started && $userId !== (int) $game->owner_id, 409, 'Lobby members are not subject to inactivity removal.');
 
             if ($userId === (int) $game->owner_id) {
                 $this->terminateGame($game, 'host_inactive');
