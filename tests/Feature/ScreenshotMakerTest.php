@@ -23,11 +23,14 @@ class ScreenshotMakerTest extends TestCase
             ->assertSee('Screenshot Maker')
             ->assertSee('FRAME 01')
             ->assertSee('FRAME 10')
-            ->assertSee('Generate frame 1 with Gemini')
-            ->assertSee('Generate frame 10 with Gemini')
+            ->assertSee('Generate artwork for frame 1')
+            ->assertSee('Generate artwork for frame 10')
             ->assertSee('YELLOW RAINBOW')
             ->assertSee('Text position')
-            ->assertSee('Phone angle');
+            ->assertSee('Phone angle')
+            ->assertSee('Amatic SC')
+            ->assertSee('Save composed screenshot')
+            ->assertSee('Saved Apple screenshots');
     }
 
     public function test_references_are_saved_and_sent_to_gemini_for_exact_apple_output(): void
@@ -77,6 +80,7 @@ class ScreenshotMakerTest extends TestCase
 
         $files = Storage::disk('public')->files('screenshots/generated');
         $this->assertCount(1, $files);
+        $this->assertCount(1, Storage::disk('public')->files('screenshots/drafts'));
         [$width, $height] = getimagesizefromstring(Storage::disk('public')->get($files[0]));
         $this->assertSame([1290, 2796], [$width, $height]);
         Http::assertSent(function ($request) {
@@ -85,9 +89,42 @@ class ScreenshotMakerTest extends TestCase
                 && $request['resolution'] === '2K'
                 && $request['aspect_ratio'] === '9:16'
                 && str_contains($request['prompt'], 'Misery-yellow (#FACC15) rainbow')
+                && str_contains($request['prompt'], 'ABSOLUTELY NO MARKETING TEXT')
+                && ! str_contains($request['prompt'], 'RANK THE WORST')
                 && collect($request['input_references'])->contains(fn ($reference) => str_starts_with($reference['image_url']['url'], 'data:image/jpeg;base64,'))
                 && collect($request['input_references'])->contains(fn ($reference) => str_starts_with($reference['image_url']['url'], 'data:image/png;base64,'));
         });
         $this->assertStringContainsString('generated/', $response->json('url'));
+    }
+
+    public function test_composed_screenshot_and_editable_metadata_are_saved_permanently(): void
+    {
+        Storage::fake('public');
+        $image = imagecreatetruecolor(1290, 2796);
+        imagefill($image, 0, 0, imagecolorallocate($image, 250, 204, 21));
+        ob_start();
+        imagejpeg($image, null, 88);
+        $jpeg = ob_get_clean();
+        imagedestroy($image);
+
+        $response = $this->withServerVariables($this->cmsServer())->postJson('/cms/screenshot-maker/save', [
+            'frame' => 1,
+            'image_data' => 'data:image/jpeg;base64,'.base64_encode($jpeg),
+            'headline' => 'RANK THE WORST',
+            'supporting_text' => 'Every bad day has a score.',
+            'text_position' => 'top',
+            'headline_font' => 'amatic',
+            'headline_color' => 'black',
+            'supporting_font' => 'outfit',
+            'supporting_color' => 'yellow',
+        ])->assertOk();
+
+        $savedFiles = collect(Storage::disk('public')->files('screenshots/saved'));
+        $this->assertCount(1, $savedFiles->filter(fn ($path) => str_ends_with($path, '.jpg')));
+        $this->assertCount(1, $savedFiles->filter(fn ($path) => str_ends_with($path, '.json')));
+        $this->assertStringContainsString('saved/', $response->json('url'));
+        $this->withServerVariables($this->cmsServer())->get('/cms/screenshot-maker')
+            ->assertOk()
+            ->assertSee($response->json('filename'));
     }
 }

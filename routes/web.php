@@ -125,6 +125,7 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     })->name('content.assets');
     Route::get('screenshot-maker', [CmsScreenshotMakerController::class, 'index'])->name('screenshots.index');
     Route::post('screenshot-maker/generate', [CmsScreenshotMakerController::class, 'generate'])->name('screenshots.generate');
+    Route::post('screenshot-maker/save', [CmsScreenshotMakerController::class, 'save'])->name('screenshots.save');
     Route::post('screenshot-maker/references', [CmsScreenshotMakerController::class, 'storeReferences'])->name('screenshots.references.store');
     Route::delete('screenshot-maker/references/{filename}', [CmsScreenshotMakerController::class, 'destroyReference'])->name('screenshots.references.destroy');
     Route::get('screenshot-maker/assets/{path}', [CmsScreenshotMakerController::class, 'asset'])

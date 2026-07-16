@@ -23,7 +23,11 @@ class ContentGeneratorTest extends TestCase
             ->assertSee('Export HQ PNG')
             ->assertSee('Locked brand guidance')
             ->assertSee('Bebas Neue')
-            ->assertSee('Outfit');
+            ->assertSee('Outfit')
+            ->assertSee('Amatic SC')
+            ->assertSee('Misery yellow')
+            ->assertSee('styleTitleFont')
+            ->assertSee('styleSubtitleColor');
 
         $this->withServerVariables($this->cmsServer())->get('/cms/content-silhouette')
             ->assertOk()

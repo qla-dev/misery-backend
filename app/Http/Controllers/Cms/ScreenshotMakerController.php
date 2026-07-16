@@ -24,7 +24,15 @@ class ScreenshotMakerController extends Controller
                 'url' => route('cms.screenshots.assets', ['path' => Str::after($path, 'screenshots/')]),
             ])->values();
 
-        return view('cms.screenshots.index', compact('references'));
+        $savedScreenshots = collect(Storage::disk('public')->files('screenshots/saved'))
+            ->filter(fn (string $path) => preg_match('/\.(png|jpe?g)$/i', $path))
+            ->sortByDesc(fn (string $path) => Storage::disk('public')->lastModified($path))
+            ->map(fn (string $path) => [
+                'name' => basename($path),
+                'url' => route('cms.screenshots.assets', ['path' => Str::after($path, 'screenshots/')]),
+            ])->values();
+
+        return view('cms.screenshots.index', compact('references', 'savedScreenshots'));
     }
 
     public function storeReferences(Request $request): JsonResponse
@@ -67,6 +75,10 @@ class ScreenshotMakerController extends Controller
             'people_count' => ['required', 'integer', 'between:0,4'],
             'people_description' => ['nullable', 'string', 'max:500'],
             'app_screen' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:12288'],
+            'headline_font' => ['nullable', Rule::in(['bebas', 'outfit', 'amatic'])],
+            'headline_color' => ['nullable', Rule::in(['white', 'yellow', 'black'])],
+            'supporting_font' => ['nullable', Rule::in(['bebas', 'outfit', 'amatic'])],
+            'supporting_color' => ['nullable', Rule::in(['white', 'yellow', 'black'])],
         ]);
 
         $references = $this->savedReferences();
@@ -81,19 +93,21 @@ class ScreenshotMakerController extends Controller
 
         $people = (int) $data['people_count'] === 0
             ? 'No people. Make the phone and app UI the sole hero.'
-            : 'Include exactly '.$data['people_count'].' people: '.trim((string) $data['people_description']).'. They support the phone and never cover important UI or headline text.';
+            : 'Include exactly '.$data['people_count'].' people: '.trim((string) $data['people_description']).'. They support the phone and never cover the app UI or the reserved copy area.';
+        $reservedCopyArea = $data['text_position'] === 'top'
+            ? 'Reserve the top 27% as a clean, low-detail copy-safe area. Keep the phone, faces, hands, and important rainbow details below it.'
+            : 'Reserve the bottom 24% as a clean, low-detail copy-safe area. Keep the phone, faces, hands, and important rainbow details above it.';
         $prompt = implode("\n", [
-            'Create a premium Apple App Store portrait marketing screenshot for the Misery Meter party game.',
-            'Output is one complete 1290 x 2796 composition, safe for an iPhone App Store screenshot.',
-            'Headline (spell exactly): '.$data['headline'],
-            'Supporting text (spell exactly): '.trim((string) $data['supporting_text']),
-            'Place all marketing text at the '.$data['text_position'].' of the canvas, outside and clearly separated from the phone frame.',
+            'Create the artwork layer for a premium Apple App Store portrait screenshot for the Misery Meter party game.',
+            'Output is one complete 1290 x 2796 composition, safe for an iPhone App Store screenshot. The CMS adds editable marketing typography later.',
+            $reservedCopyArea,
+            'ABSOLUTELY NO MARKETING TEXT: do not draw any headline, subtitle, caption, slogan, placeholder letters, mockup labels, or decorative typography anywhere outside the supplied app screen.',
             'Phone presentation angle: '.$data['phone_angle'].'. Show a realistic premium black iPhone frame with the supplied app screen fitted naturally inside it.',
             'Background direction: '.$data['background'].'.',
             $people,
             'MANDATORY BRAND BACKGROUND: every screenshot has a bold Misery-yellow (#FACC15) rainbow made from broad concentric arcs/rays behind the phone. Use yellow, warm gold, black, and white as the dominant palette. The yellow rainbow must be unmistakable in every result.',
             'Use the supplied App Store examples only for hierarchy, commercial polish, phone perspective, spacing, and the relationship between headline, device, and people. Never copy their brands, wording, colors, faces, logos, or app screens.',
-            'High-end campaign art, crisp typography, generous safe margins, no watermark, no extra logos, no mockup labels, no text besides the exact headline/supporting text and text already present inside the supplied app UI.',
+            'High-end campaign art, generous safe margins, no watermark, no extra logos. Text already visible inside the supplied app UI may remain; generate no other text.',
         ]);
 
         try {
@@ -101,6 +115,18 @@ class ScreenshotMakerController extends Controller
             $jpeg = $this->appleScreenshotJpeg($result['data']);
             $filename = 'frame-'.str_pad((string) $data['frame'], 2, '0', STR_PAD_LEFT).'-'.Str::uuid().'.jpg';
             Storage::disk('public')->put('screenshots/generated/'.$filename, $jpeg);
+            $draft = [
+                'frame' => (int) $data['frame'],
+                'artwork' => $filename,
+                'headline' => $data['headline'],
+                'supporting_text' => trim((string) $data['supporting_text']),
+                'text_position' => $data['text_position'],
+                'headline_font' => $data['headline_font'] ?? 'bebas',
+                'headline_color' => $data['headline_color'] ?? 'black',
+                'supporting_font' => $data['supporting_font'] ?? 'outfit',
+                'supporting_color' => $data['supporting_color'] ?? 'black',
+            ];
+            Storage::disk('public')->put('screenshots/drafts/'.pathinfo($filename, PATHINFO_FILENAME).'.json', json_encode($draft, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
             return response()->json([
                 'url' => route('cms.screenshots.assets', ['path' => 'generated/'.$filename]),
@@ -109,6 +135,7 @@ class ScreenshotMakerController extends Controller
                 'height' => 2796,
                 'provider' => $result['provider'],
                 'model' => $result['model'],
+                'draft' => $draft,
             ]);
         } catch (Throwable $error) {
             Log::error('CMS App Store screenshot generation failed', [
@@ -119,6 +146,42 @@ class ScreenshotMakerController extends Controller
 
             return response()->json(['message' => 'Screenshot generation failed: '.($error->getMessage() ?: 'Unknown Gemini error.')], 502);
         }
+    }
+
+    public function save(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'frame' => ['required', 'integer', 'between:1,10'],
+            'image_data' => ['required', 'string', 'max:30000000'],
+            'headline' => ['required', 'string', 'max:90'],
+            'supporting_text' => ['nullable', 'string', 'max:180'],
+            'text_position' => ['required', Rule::in(['top', 'bottom'])],
+            'headline_font' => ['required', Rule::in(['bebas', 'outfit', 'amatic'])],
+            'headline_color' => ['required', Rule::in(['white', 'yellow', 'black'])],
+            'supporting_font' => ['required', Rule::in(['bebas', 'outfit', 'amatic'])],
+            'supporting_color' => ['required', Rule::in(['white', 'yellow', 'black'])],
+        ]);
+
+        abort_unless(
+            preg_match('#^data:image/(png|jpeg);base64,([A-Za-z0-9+/=\r\n]+)$#', $data['image_data'], $matches) === 1,
+            422,
+            'The composed screenshot must be a PNG or JPEG data URL.'
+        );
+        $image = base64_decode(str_replace(["\r", "\n"], '', $matches[2]), true);
+        abort_unless(is_string($image) && $image !== '', 422, 'The composed screenshot could not be decoded.');
+        $dimensions = getimagesizefromstring($image);
+        abort_unless(is_array($dimensions) && $dimensions[0] === 1290 && $dimensions[1] === 2796, 422, 'Saved screenshots must be exactly 1290 × 2796.');
+
+        $extension = $matches[1] === 'jpeg' ? 'jpg' : 'png';
+        $base = 'frame-'.str_pad((string) $data['frame'], 2, '0', STR_PAD_LEFT).'-'.now()->format('YmdHis').'-'.Str::lower(Str::random(6));
+        $filename = $base.'.'.$extension;
+        Storage::disk('public')->put('screenshots/saved/'.$filename, $image);
+        Storage::disk('public')->put('screenshots/saved/'.$base.'.json', json_encode(collect($data)->except('image_data')->all(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+        return response()->json([
+            'filename' => $filename,
+            'url' => route('cms.screenshots.assets', ['path' => 'saved/'.$filename]),
+        ]);
     }
 
     public function asset(string $path): BinaryFileResponse
