@@ -579,9 +579,12 @@ class CmsTest extends TestCase
             && $request['model'] === 'google/gemini-image-test'
             && $request['aspect_ratio'] === '1:1'
             && str_contains($request['prompt'], 'image restoration, not a redesign')
+            && str_contains($request['prompt'], 'DO NOT preserve the source crop or framing')
             && str_contains($request['prompt'], 'AUTO-ZOOM AND REFRAME')
-            && str_contains($request['prompt'], 'black empty margin independently from the top, bottom, left, and right edges')
-            && str_contains($request['prompt'], 'outermost real non-black artwork reaches the available square bounds from all four sides')
+            && str_contains($request['prompt'], 'identify the tight bounding box of every real non-black pixel')
+            && str_contains($request['prompt'], 'EDGE ACCEPTANCE CHECK')
+            && str_contains($request['prompt'], 'topmost real colored or white pixel must begin at the top content boundary')
+            && str_contains($request['prompt'], 'Sharpness improvement alone is not a successful enhancement')
             && str_contains($request['prompt'], 'canonical Misery yellow #FACC15')
             && str_contains($request['prompt'], 'correct every yellow area back to the uniform solid color #FACC15')
             && str_starts_with($request['input_references'][0]['image_url']['url'], 'data:image/jpeg;base64,'));
