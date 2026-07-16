@@ -683,6 +683,9 @@ class GameController extends Controller
             abort_unless($game->started, 409, 'Inactivity removal only applies after the game has started.');
             $originalMemberIds = $this->memberIds($game);
             abort_unless(in_array($userId, $originalMemberIds, true), 404, 'Player is not in this room.');
+            abort_if($game->winner_id, 409, 'The game has already finished.');
+            abort_if($game->awaiting_finish, 409, 'The completed turn can no longer expire from inactivity.');
+            abort_unless((int) $game->current_player_id === $userId, 409, 'This player is no longer the active player.');
 
             if ($userId === (int) $game->owner_id) {
                 $this->terminateGame($game, 'host_inactive');

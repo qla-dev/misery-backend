@@ -28,6 +28,9 @@ class QuestionCmsTest extends TestCase
             ->assertOk()
             ->assertSee('Generate card content')
             ->assertSee('suggested two-decimal misery scores')
+            ->assertSee('Number of cards')
+            ->assertSee('name="count"', false)
+            ->assertSee('min="1" max="20"', false)
             ->assertDontSee('Generate questions');
 
         $this->withServerVariables($this->server)->get('/cms')
@@ -48,7 +51,7 @@ class QuestionCmsTest extends TestCase
             ->assertJsonPath('data.0.question', 'Visible sports question?');
     }
 
-    public function test_ai_generator_saves_exactly_ten_unique_cards_with_scores(): void
+    public function test_ai_generator_saves_the_selected_number_of_unique_cards_with_scores(): void
     {
         $this->existingCard('Existing disaster');
         config([
@@ -84,19 +87,28 @@ class QuestionCmsTest extends TestCase
 
         $before = Card::count();
         $this->withServerVariables($this->server)->post('/cms/generator', [
-            'theme' => 'mixed', 'severity' => 'mixed',
+            'theme' => 'mixed', 'severity' => 'mixed', 'count' => 6,
         ])->assertRedirect(route('cms.cards.index'))->assertSessionHas('success');
 
-        $this->assertSame($before + 10, Card::count());
-        $this->assertSame(10, Card::whereIn('title', $titles)->count());
-        $this->assertSame(10, Card::whereIn('title', $titles)->where('image', '0')->count());
-        $this->assertSame(10, Card::whereIn('title', $titles)->where('status', false)->count());
+        $this->assertSame($before + 6, Card::count());
+        $this->assertSame(6, Card::whereIn('title', $titles)->count());
+        $this->assertSame(6, Card::whereIn('title', $titles)->where('image', '0')->count());
+        $this->assertSame(6, Card::whereIn('title', $titles)->where('status', false)->count());
 
         Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
             && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Existing disaster')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'retain the best 6')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), '"minItems":6')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'misery score')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'description'));
+    }
+
+    public function test_generator_rejects_a_card_count_outside_the_supported_range(): void
+    {
+        $this->withServerVariables($this->server)->from('/cms/generator')->post('/cms/generator', [
+            'theme' => 'mixed', 'severity' => 'mixed', 'count' => 21,
+        ])->assertRedirect('/cms/generator')->assertSessionHasErrors('count');
     }
 
     public function test_invalid_or_duplicate_generation_batch_saves_nothing(): void

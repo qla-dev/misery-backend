@@ -103,6 +103,7 @@ class CardController extends Controller
         $source = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'subtitle' => ['nullable', 'string', 'max:1000'],
+            'save' => ['sometimes', 'boolean'],
         ]);
         $source['title'] = trim($source['title']);
         $source['subtitle'] = trim((string) ($source['subtitle'] ?? ''));
@@ -126,13 +127,19 @@ class CardController extends Controller
         foreach ($providers as $provider => $translate) {
             try {
                 $translation = $this->decodeBosnianTranslation($translate(), $source['subtitle'] !== '');
+                if ($request->boolean('save')) {
+                    $card->update($translation);
+                }
 
                 Log::info('CMS card translated to Bosnian', [
                     'card_id' => $card->id,
                     'provider' => $provider,
                 ]);
 
-                return response()->json($translation + ['provider' => $provider]);
+                return response()->json($translation + [
+                    'provider' => $provider,
+                    'saved' => $request->boolean('save'),
+                ]);
             } catch (Throwable $error) {
                 $lastError = $error;
                 Log::warning('CMS Bosnian card translation provider failed', [
@@ -155,6 +162,8 @@ class CardController extends Controller
             'The target language is specifically Bosnian, not Croatian and not Serbian.',
             'Use natural contemporary Bosnian in the ijekavian standard. Avoid Croatian-only wording, Serbian ekavian forms, and unnatural literal calques.',
             'Pay exceptional attention to Bosnian grammar, cases, gender, number, agreement, word order, idiom, and punctuation.',
+            'CARD-TITLE GRAMMAR IS MANDATORY: express the title as a concise nominal phrase whose grammatical head is in the nominative case, normally using a Bosnian verbal noun (glagolska imenica). Never translate an English imperative title as a command, and do not use an infinitive as the title.',
+            'Example: "Send a Private Photo to the Family Group" must become "Slanje privatne fotografije u porodičnu grupu", never "Pošalji privatnu fotografiju porodičnoj grupi".',
             'Use the Bosnian Latin alphabet correctly. Preserve every diacritic and especially distinguish the affricates č, ć, dž and đ. Never replace them with c, dj, dz, or approximate spellings.',
             'Keep the same meaning, severity, humor, point of view, names, numbers, and factual details. Do not add, remove, soften, censor, or explain content.',
             'The title must remain concise and instantly readable on a game card. The description must remain one natural sentence when the English source has a description.',

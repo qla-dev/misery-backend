@@ -16,7 +16,9 @@ use Throwable;
 
 class CardGeneratorController extends Controller
 {
-    private const GENERATION_COUNT = 10;
+    private const DEFAULT_GENERATION_COUNT = 10;
+
+    private const MAX_GENERATION_COUNT = 20;
 
     private const THEMES = [
         'mixed' => 'Mixed situations',
@@ -52,7 +54,9 @@ class CardGeneratorController extends Controller
         $selection = $request->validate([
             'theme' => ['required', Rule::in(array_keys(self::THEMES))],
             'severity' => ['required', Rule::in(array_keys(self::SEVERITIES))],
+            'count' => ['sometimes', 'integer', 'min:1', 'max:'.self::MAX_GENERATION_COUNT],
         ]);
+        $selection['count'] = (int) ($selection['count'] ?? self::DEFAULT_GENERATION_COUNT);
 
         if (! config('services.gemini.key') && ! config('services.openrouter.key')) {
             return back()->withInput()->withErrors([
@@ -67,7 +71,7 @@ class CardGeneratorController extends Controller
 
         if (config('services.gemini.key')) {
             try {
-                $content = $this->generateWithGemini($prompt);
+                $content = $this->generateWithGemini($prompt, $selection['count']);
             } catch (Throwable $error) {
                 Log::warning('CMS card-content generation Gemini primary failed', ['exception' => $error]);
                 if (! config('services.openrouter.key')) {
@@ -79,7 +83,7 @@ class CardGeneratorController extends Controller
         if (! is_string($content)) {
             $providerUsed = 'OpenRouter fallback';
             try {
-                $content = $this->generateWithOpenRouter($prompt);
+                $content = $this->generateWithOpenRouter($prompt, $selection['count']);
             } catch (Throwable $error) {
                 Log::error('CMS card-content generation OpenRouter fallback failed', ['exception' => $error]);
 
@@ -94,15 +98,15 @@ class CardGeneratorController extends Controller
         }
 
         $accepted = $this->uniqueCandidates(data_get($decoded, 'cards', []), $existingCards->pluck('title')->all(), $selection['severity']);
-        if (count($accepted) < self::GENERATION_COUNT) {
+        if (count($accepted) < $selection['count']) {
             return back()->withInput()->withErrors([
-                'generation' => 'The AI did not produce 10 valid, unique card situations. Nothing was saved; please try again.',
+                'generation' => 'The AI did not produce '.$selection['count'].' valid, unique card situations. Nothing was saved; please try again.',
             ]);
         }
 
         $stack = Stack::where('slug', 'normal')->firstOrFail();
-        DB::transaction(function () use ($accepted, $stack) {
-            foreach (array_slice($accepted, 0, self::GENERATION_COUNT) as $candidate) {
+        DB::transaction(function () use ($accepted, $selection, $stack) {
+            foreach (array_slice($accepted, 0, $selection['count']) as $candidate) {
                 Card::create([
                     'title' => $candidate['title'],
                     'subtitle' => $candidate['description'],
@@ -117,11 +121,11 @@ class CardGeneratorController extends Controller
 
         return redirect()->route('cms.cards.index')->with(
             'success',
-            '10 unique card situations with suggested misery scores generated via '.$providerUsed.'.'
+            $selection['count'].' unique card situations with suggested misery scores generated via '.$providerUsed.'.'
         );
     }
 
-    private function generateWithGemini(string $prompt): string
+    private function generateWithGemini(string $prompt, int $count): string
     {
         $model = (string) config('services.gemini.text_model');
         $response = Http::withHeaders(['x-goog-api-key' => config('services.gemini.key')])
@@ -131,7 +135,7 @@ class CardGeneratorController extends Controller
                     $this->systemPrompt(),
                     $prompt,
                     'Return only JSON matching this exact schema, with no Markdown or explanation:',
-                    json_encode($this->cardSchema(), JSON_UNESCAPED_SLASHES),
+                    json_encode($this->cardSchema($count), JSON_UNESCAPED_SLASHES),
                 ])]]]],
             ])->throw()->json();
 
@@ -144,7 +148,7 @@ class CardGeneratorController extends Controller
         return $content;
     }
 
-    private function generateWithOpenRouter(string $prompt): string
+    private function generateWithOpenRouter(string $prompt, int $count): string
     {
         $response = Http::withToken(config('services.openrouter.key'))
             ->withHeaders(array_filter([
@@ -159,7 +163,7 @@ class CardGeneratorController extends Controller
                 ],
                 'temperature' => 0.95,
                 'response_format' => ['type' => 'json_schema', 'json_schema' => [
-                    'name' => 'card_content_batch', 'strict' => true, 'schema' => $this->cardSchema(),
+                    'name' => 'card_content_batch', 'strict' => true, 'schema' => $this->cardSchema($count),
                 ]],
             ])->throw()->json();
 
@@ -183,13 +187,15 @@ class CardGeneratorController extends Controller
     private function generationPrompt(array $selection, array $existing): string
     {
         [$severityLabel, $minimum, $maximum] = self::SEVERITIES[$selection['severity']];
+        $count = (int) $selection['count'];
+        $candidateCount = min(self::MAX_GENERATION_COUNT, max($count, (int) ceil($count * 1.8)));
         $excluded = implode("\n", array_map(
             fn (array $card) => '- '.$card['title'].' | '.$card['subtitle'].' | score '.$card['score'],
             array_slice($existing, -300)
         ));
 
         return implode("\n", [
-            'Generate 18 candidate Misery Index cards so the application can retain the best 10.',
+            "Generate {$candidateCount} candidate Misery Index cards so the application can retain the best {$count}.",
             'Theme: '.self::THEMES[$selection['theme']],
             "Requested severity: {$severityLabel}; every score must be between {$minimum} and {$maximum}.",
             'Use natural English. Title: 4–12 words. Description: one vivid sentence under 180 characters.',
@@ -201,12 +207,12 @@ class CardGeneratorController extends Controller
         ]);
     }
 
-    private function cardSchema(): array
+    private function cardSchema(int $count): array
     {
         return [
             'type' => 'object',
             'properties' => ['cards' => [
-                'type' => 'array', 'minItems' => self::GENERATION_COUNT, 'maxItems' => 20,
+                'type' => 'array', 'minItems' => $count, 'maxItems' => self::MAX_GENERATION_COUNT,
                 'items' => [
                     'type' => 'object',
                     'properties' => [

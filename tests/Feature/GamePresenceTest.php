@@ -139,7 +139,13 @@ class GamePresenceTest extends TestCase
     {
         $host = User::factory()->create(['color' => 'yellow']);
         $guest = User::factory()->create(['color' => 'blue']);
-        $game = Game::create(['code' => 'IDLEHOST', 'owner_id' => $host->id, 'started' => true]);
+        $game = Game::create([
+            'code' => 'IDLEHOST',
+            'owner_id' => $host->id,
+            'started' => true,
+            'current_player_id' => $host->id,
+            'turn_owner_id' => $host->id,
+        ]);
         $game->members()->attach([$host->id, $guest->id]);
 
         $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $host->id])
@@ -148,6 +154,31 @@ class GamePresenceTest extends TestCase
             ->assertJsonCount(0, 'data.members');
 
         $this->assertNotNull($game->refresh()->terminated_at);
+    }
+
+    public function test_stale_turn_timeout_cannot_remove_a_player_after_the_turn_advances(): void
+    {
+        $host = User::factory()->create(['color' => 'yellow']);
+        $guest = User::factory()->create(['color' => 'blue']);
+        $game = Game::create([
+            'code' => 'STALE123',
+            'owner_id' => $host->id,
+            'started' => true,
+            'current_player_id' => $host->id,
+            'turn_owner_id' => $host->id,
+        ]);
+        $game->members()->attach([$host->id, $guest->id]);
+
+        $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $guest->id])
+            ->assertStatus(409);
+
+        $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
+
+        $game->update(['current_player_id' => $guest->id, 'turn_owner_id' => $guest->id, 'awaiting_finish' => true]);
+        $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $guest->id])
+            ->assertStatus(409);
+
+        $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
     }
 
     public function test_host_can_remove_a_guest_only_while_in_the_lobby(): void

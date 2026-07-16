@@ -30,6 +30,9 @@ class CmsTest extends TestCase
             ->assertSee('All packs')
             ->assertSee('Export')
             ->assertSee('Generate')
+            ->assertSee('Enhance selected')
+            ->assertSee('Bosnian translate selected')
+            ->assertSee('selectVisibleCards', false)
             ->assertSee('CARD_EXPORT_WIDTH=1200', false);
         $this->withServerVariables($server)->get('/cms/native-card-artwork')
             ->assertOk()
@@ -154,13 +157,26 @@ class CmsTest extends TestCase
             ->assertJsonPath('provider', 'Gemini');
 
         $this->assertNull($card->fresh()->title_bs);
+
+        $this->withServerVariables($server)->postJson('/cms/cards/'.$card->id.'/translate-bs', [
+            'title' => $card->title,
+            'subtitle' => $card->subtitle,
+            'save' => true,
+        ])->assertOk()
+            ->assertJsonPath('saved', true);
+
+        $this->assertSame('Probušena guma usred oluje', $card->fresh()->title_bs);
         Http::assertSent(function ($request) {
             $prompt = $request['contents'][0]['parts'][0]['text'];
 
             return str_contains($prompt, 'specifically Bosnian, not Croatian and not Serbian')
                 && str_contains($prompt, 'ijekavian standard')
                 && str_contains($prompt, 'č, ć, dž and đ')
-                && str_contains($prompt, 'grammar, cases, gender, number, agreement');
+                && str_contains($prompt, 'grammar, cases, gender, number, agreement')
+                && str_contains($prompt, 'grammatical head is in the nominative case')
+                && str_contains($prompt, 'Bosnian verbal noun (glagolska imenica)')
+                && str_contains($prompt, 'Slanje privatne fotografije u porodičnu grupu')
+                && str_contains($prompt, 'never "Pošalji privatnu fotografiju porodičnoj grupi"');
         });
     }
 
