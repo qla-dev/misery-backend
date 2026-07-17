@@ -140,6 +140,7 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::post('cards/{card}/generate', [CmsCardController::class, 'generate'])->name('cards.generate');
     Route::post('cards/{card}/translate-bs', [CmsCardController::class, 'translateToBosnian'])->name('cards.translate-bs');
     Route::post('cards/{card}/crop-generated', [CmsCardController::class, 'saveGeneratedCrop'])->name('cards.crop-generated');
+    Route::post('cards/{card}/convert-webp', [CmsCardController::class, 'convertArtworkToWebp'])->name('cards.convert-webp');
     Route::post('cards/{card}/enhance-artwork', [CmsCardController::class, 'enhanceArtwork'])->name('cards.enhance-artwork');
     Route::post('cards/{card}/generate-svg', [CmsCardController::class, 'generateSvg'])->name('cards.generate-svg');
     Route::post('cards/{card}/status', [CmsCardController::class, 'setStatus'])->name('cards.status');

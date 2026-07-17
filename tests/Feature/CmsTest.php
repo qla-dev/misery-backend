@@ -532,7 +532,7 @@ class CmsTest extends TestCase
             ->assertSessionHasErrors('generation');
     }
 
-    public function test_generated_artwork_crop_replaces_the_original_with_a_square_jpeg(): void
+    public function test_generated_artwork_crop_replaces_the_original_with_a_768_webp(): void
     {
         Storage::fake('public');
         $stack = Stack::where('slug', 'normal')->firstOrFail();
@@ -560,7 +560,7 @@ class CmsTest extends TestCase
                 'generation_id' => '550e8400-e29b-41d4-a716-446655440000',
             ])
             ->assertRedirect(route('cms.cards.edit', $card))
-            ->assertSessionHas('success', 'Square artwork crop saved.');
+            ->assertSessionHas('success', '768 × 768 WebP artwork crop saved.');
 
         $croppedPath = $card->fresh()->image;
         $this->assertNotSame($originalPath, $croppedPath);
@@ -569,15 +569,47 @@ class CmsTest extends TestCase
         $this->assertLessThanOrEqual(100 * 1024, strlen(Storage::disk('public')->get($croppedPath)));
         $saved = imagecreatefromstring(Storage::disk('public')->get($croppedPath));
         $this->assertNotFalse($saved);
-        $this->assertSame(1024, imagesx($saved));
-        $this->assertSame(1024, imagesy($saved));
+        $this->assertSame(768, imagesx($saved));
+        $this->assertSame(768, imagesy($saved));
+        $this->assertStringEndsWith('.webp', $croppedPath);
         imagedestroy($saved);
 
         $this->withServerVariables($server)->postJson('/cms/cards/'.$card->id.'/crop-generated', [
             'crop_data' => 'data:image/jpeg;base64,'.base64_encode($jpeg),
         ])->assertOk()
-            ->assertJsonPath('message', 'Square artwork crop saved.')
+            ->assertJsonPath('message', '768 × 768 WebP artwork crop saved.')
             ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/card-'.$card->id.'-cropped-'));
+    }
+
+    public function test_cms_can_convert_existing_artwork_to_768_webp(): void
+    {
+        Storage::fake('public');
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $originalPath = 'cards/uploads/large.jpg';
+        $image = imagecreatetruecolor(1024, 1024);
+        imagefill($image, 0, 0, imagecolorallocate($image, 250, 204, 21));
+        ob_start();
+        imagejpeg($image, null, 95);
+        Storage::disk('public')->put($originalPath, ob_get_clean());
+        imagedestroy($image);
+        $card = Card::create(['title' => 'Convert me', 'score' => 25, 'image' => $originalPath, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->postJson('/cms/cards/'.$card->id.'/convert-webp')
+            ->assertOk()
+            ->assertJsonPath('dimensions', '768x768');
+
+        $path = $card->fresh()->image;
+        $this->assertStringEndsWith('.webp', $path);
+        Storage::disk('public')->assertMissing($originalPath);
+        Storage::disk('public')->assertExists($path);
+        $bytes = Storage::disk('public')->get($path);
+        $this->assertLessThanOrEqual(100 * 1024, strlen($bytes));
+        $saved = imagecreatefromstring($bytes);
+        $this->assertSame(768, imagesx($saved));
+        $this->assertSame(768, imagesy($saved));
+        imagedestroy($saved);
+        $this->get('/card-images/'.$path)->assertOk()->assertHeader('Content-Type', 'image/webp');
     }
 
     public function test_current_artwork_can_be_enhanced_and_kept_below_one_hundred_kilobytes(): void

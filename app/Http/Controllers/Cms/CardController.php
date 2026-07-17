@@ -591,11 +591,11 @@ class CardController extends Controller
         abort_unless($image !== false && $image !== '', 422, 'The cropped artwork could not be decoded.');
         abort_if(strlen($image) > 8 * 1024 * 1024, 422, 'The cropped artwork is too large.');
 
-        $jpeg = $this->convertCroppedImageToJpeg($image);
-        abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 422, 'The cropped JPEG could not be optimized below 100 KB. Please zoom or crop it again.');
+        $webp = $this->convertImageToWebp($image, 768, 422);
+        abort_if(strlen($webp) > self::MAX_GENERATED_JPEG_BYTES, 422, 'The cropped WebP could not be optimized below 100 KB. Please zoom or crop it again.');
 
-        $path = 'cards/generated/card-'.$card->id.'-cropped-'.Str::uuid().'.jpg';
-        Storage::disk('public')->put($path, $jpeg);
+        $path = 'cards/generated/card-'.$card->id.'-cropped-'.Str::uuid().'.webp';
+        Storage::disk('public')->put($path, $webp);
         abort_unless(Storage::disk('public')->exists($path), 500, 'The cropped artwork was not found after writing it to storage.');
 
         $previousImage = $card->image;
@@ -606,17 +606,42 @@ class CardController extends Controller
             'card_id' => $card->id,
             'generation_id' => $data['generation_id'] ?? null,
             'storage_path' => $path,
-            'jpeg_bytes' => strlen($jpeg),
+            'webp_bytes' => strlen($webp),
+            'dimensions' => '768x768',
         ]);
 
         if ($request->expectsJson()) {
             return response()->json([
                 'image' => url('/card-images/'.$path),
-                'message' => 'Square artwork crop saved.',
+                'message' => '768 × 768 WebP artwork crop saved.',
             ]);
         }
 
-        return redirect($this->cardEditUrl($request, $card))->with('success', 'Square artwork crop saved.');
+        return redirect($this->cardEditUrl($request, $card))->with('success', '768 × 768 WebP artwork crop saved.');
+    }
+
+    public function convertArtworkToWebp(Request $request, Card $card)
+    {
+        $previousPath = (string) $card->image;
+        abort_if($previousPath === '' || $previousPath === '0' || Str::startsWith($previousPath, ['http://', 'https://']), 422, 'Only locally stored card artwork can be converted.');
+        $storagePath = preg_replace('#^storage/#', '', ltrim($previousPath, '/'));
+        abort_unless(is_string($storagePath) && Storage::disk('public')->exists($storagePath), 404, 'The current artwork could not be found.');
+
+        $webp = $this->convertImageToWebp(Storage::disk('public')->get($storagePath), 768, 422);
+        abort_if(strlen($webp) > self::MAX_GENERATED_JPEG_BYTES, 422, 'The WebP artwork could not be optimized below 100 KB.');
+        $path = 'cards/generated/card-'.$card->id.'-'.Str::uuid().'.webp';
+        Storage::disk('public')->put($path, $webp);
+        abort_unless(Storage::disk('public')->exists($path), 500, 'The converted WebP artwork was not found after writing it to storage.');
+
+        $card->update(['image' => $path]);
+        $this->deleteManagedImage($previousPath);
+
+        return response()->json([
+            'bytes' => strlen($webp),
+            'dimensions' => '768x768',
+            'image' => url('/card-images/'.$path),
+            'message' => 'Artwork converted to 768 × 768 WebP.',
+        ]);
     }
 
     public function enhanceArtwork(Request $request, Card $card, GeminiImageGenerator $generator)
@@ -1127,30 +1152,38 @@ class CardController extends Controller
         return $result;
     }
 
-    private function convertCroppedImageToJpeg(string $image): string
+    private function convertImageToWebp(string $image, int $size = 768, int $status = 422): string
     {
-        abort_unless(function_exists('imagecreatefromstring'), 422, 'GD is unavailable for crop processing.');
+        abort_unless(function_exists('imagecreatefromstring') && function_exists('imagewebp'), $status, 'GD WebP support is unavailable.');
         $source = @imagecreatefromstring($image);
-        abort_unless($source !== false, 422, 'The cropped artwork is not a valid image.');
+        abort_unless($source !== false, $status, 'The artwork is not a valid image.');
 
         $width = imagesx($source);
         $height = imagesy($source);
-        abort_if($width < 256 || $height < 256 || $width !== $height, 422, 'The cropped artwork must be a square image of at least 256 pixels.');
+        abort_if($width < 256 || $height < 256 || $width !== $height, $status, 'The artwork must be a square image of at least 256 pixels.');
 
-        if ($width !== 1024) {
-            $resized = imagecreatetruecolor(1024, 1024);
+        if ($width !== $size) {
+            $resized = imagecreatetruecolor($size, $size);
             $black = imagecolorallocate($resized, 0, 0, 0);
             imagefill($resized, 0, 0, $black);
-            imagecopyresampled($resized, $source, 0, 0, 0, 0, 1024, 1024, $width, $height);
+            imagecopyresampled($resized, $source, 0, 0, 0, 0, $size, $size, $width, $height);
             imagedestroy($source);
             $source = $resized;
         }
 
         $source = $this->enforceGeneratedPaletteAndSquareCorners($source);
-        $result = $this->encodeCardJpeg($source);
+        $result = '';
+        foreach ([90, 86, 82, 78, 74, 70, 66, 62, 58, 54] as $quality) {
+            ob_start();
+            imagewebp($source, null, $quality);
+            $encoded = ob_get_clean();
+            abort_unless(is_string($encoded) && $encoded !== '', $status, 'Card artwork could not be encoded as WebP.');
+            $result = $encoded;
+            if (strlen($result) <= self::MAX_GENERATED_JPEG_BYTES) break;
+        }
         imagedestroy($source);
 
-        abort_unless(is_string($result) && $result !== '', 422, 'The cropped artwork could not be encoded as JPEG.');
+        abort_unless($result !== '', $status, 'The artwork could not be encoded as WebP.');
 
         return $result;
     }
