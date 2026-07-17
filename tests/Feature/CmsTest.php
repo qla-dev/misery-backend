@@ -75,6 +75,33 @@ class CmsTest extends TestCase
             ->assertSeeInOrder(['Small artwork', 'Large artwork']);
     }
 
+    public function test_deleting_a_card_preserves_the_filtered_list_url(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create(['title' => 'Delete filtered', 'score' => 10, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+        $filteredUrl = route('cms.cards.index', ['format' => 'webp', 'status' => '1', 'sort' => 'card_id', 'direction' => 'desc', 'page' => '2']);
+
+        $this->withServerVariables($server)->withHeader('referer', $filteredUrl)
+            ->delete('/cms/cards/'.$card->id)
+            ->assertRedirect($filteredUrl);
+
+        $this->assertDatabaseMissing('cards', ['id' => $card->id]);
+    }
+
+    public function test_cms_displays_card_id_before_artwork_and_sorts_by_id(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $first = Card::create(['title' => 'Earlier ID', 'score' => 80, 'image' => 'cards/earlier.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $second = Card::create(['title' => 'Later ID', 'score' => 10, 'image' => 'cards/later.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->get('/cms/cards?sort=card_id&direction=desc')
+            ->assertOk()
+            ->assertSeeInOrder(['>ID ↓</a>', '>Art</th>'], false)
+            ->assertSeeInOrder(['data-card-id="'.$second->id.'"', 'data-card-id="'.$first->id.'"'], false);
+    }
+
     public function test_cms_displays_filters_and_sorts_artwork_format_with_translation_status(): void
     {
         Storage::fake('public');
@@ -180,6 +207,7 @@ class CmsTest extends TestCase
             ->assertSee('Delete selected')
             ->assertSee('Swap artwork')
             ->assertSee('Convert selected to WebP')
+            ->assertSee('artwork-format-download', false)
             ->assertSee('data-change-artwork', false)
             ->assertSee('artworkPicker', false)
             ->assertSee('art-thumb__preview', false);

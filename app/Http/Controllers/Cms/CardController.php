@@ -54,6 +54,12 @@ class CardController extends Controller
                 $page,
                 ['path' => $request->url(), 'query' => $request->query()]
             );
+        } elseif ($sort === 'card_id') {
+            $direction = $request->string('direction')->lower()->toString() === 'desc' ? 'desc' : 'asc';
+            $cards = $cardQuery->orderBy('id', $direction)->paginate(25)->withQueryString();
+            $cards->getCollection()->each(function (Card $card) {
+                $this->addArtworkMetadata($card);
+            });
         } else {
             $cards = $cardQuery->orderBy('score')->paginate(25)->withQueryString();
             $cards->getCollection()->each(function (Card $card) {
@@ -150,14 +156,18 @@ class CardController extends Controller
         ]);
     }
 
-    public function destroy(Card $card)
+    public function destroy(Request $request, Card $card)
     {
         $image = $card->image;
         $this->deleteManagedSvg($card->svg_img);
         $card->delete();
         $this->deleteManagedImageIfUnused($image);
 
-        return redirect()->route('cms.cards.index')->with('success', 'Card deleted.');
+        if (! $request->filled('return')) {
+            $request->merge(['return' => (string) $request->headers->get('referer', '')]);
+        }
+
+        return redirect($this->cardsReturnUrl($request))->with('success', 'Card deleted.');
     }
 
     public function bulkDestroy(Request $request)
