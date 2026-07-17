@@ -412,7 +412,7 @@ class CardController extends Controller
         }
         $prompt = implode("\n", [
             'Use case: stylized-concept',
-            'Asset type: finished square JPEG illustration for a Misery Index game card',
+            'Asset type: finished square WebP illustration for a Misery Index game card',
             "Situation: {$card->title}",
             $card->subtitle ? "Context: {$card->subtitle}" : '',
             'Create one bold, instantly readable pictogram scene that clearly explains the unfortunate situation.',
@@ -462,10 +462,10 @@ class CardController extends Controller
             'Absolute frame ban: do not draw any enclosing rectangle, square, outline, keyline, stroke, picture frame, card frame, poster frame, inner border, outer border, white border, amber border, or decorative line around the scene. No line may run parallel to and connect around the four canvas edges. The artwork must remain an open edge-to-edge scene on black.',
             'Quality: render at 1024×1024 or higher with smooth antialiasing, clean curves, crisp shape boundaries, and no pixelation, jagged edges, compression artifacts, grain, noise, halftone dots, texture, or blur.',
             'Production sharpness pass: render every silhouette and geometric shape as if it were precision vector artwork, with decisive high-contrast boundaries, smooth curves, clean joins, and legible small details. Inspect the result at 200% and eliminate soft focus, smeared edges, stair-stepping, fuzzy halos, color fringing, and malformed micro-details before returning it.',
-            'Lightweight delivery design: keep the scene visually bold and economical enough to encode as a 1024×1024 JPEG below 100 KB without visible degradation. Prefer large clean filled shapes over noisy micro-detail, dense texture, or needless tiny fragments; file-size optimization must never reduce edge sharpness or introduce pixelation.',
+            'Lightweight delivery design: keep the scene visually bold and economical enough to encode as a 1024×1024 WebP below 100 KB without visible degradation. Prefer large clean filled shapes over noisy micro-detail, dense texture, or needless tiny fragments; file-size optimization must never reduce edge sharpness or introduce pixelation.',
             'Zero typography rule: the generated image must contain absolutely no text-like marks: no words, letters, numbers, digits, decimal points, scores, ratings, captions, labels, signs, UI, symbols that resemble writing, logos, or watermark. Do not render the card title, description, or misery score inside the artwork.',
-            'Output is illustration only: never depict a finished game card, card shell, poster, badge, score panel, caption area, title area, UI panel, or rounded rectangular container. The JPEG itself is the scene, not a picture of a card.',
-            'Constraints: JPEG; no card frame, border, gradients, lighting effects, or shadows. Use only black #000000, white #FFFFFF, and amber #FACC15.',
+            'Output is illustration only: never depict a finished game card, card shell, poster, badge, score panel, caption area, title area, UI panel, or rounded rectangular container. The WebP itself is the scene, not a picture of a card.',
+            'Constraints: WebP; no card frame, border, gradients, lighting effects, or shadows. Use only black #000000, white #FFFFFF, and amber #FACC15.',
         ]);
 
         $providerUsed = 'openrouter';
@@ -492,7 +492,7 @@ class CardController extends Controller
                     'size' => '1024x1024',
                     'quality' => 'high',
                     'background' => 'opaque',
-                    'output_format' => 'jpeg',
+                    'output_format' => 'webp',
                     'input_references' => $references,
                 ]);
 
@@ -566,19 +566,19 @@ class CardController extends Controller
                 'encoded_image_bytes' => is_string($encoded) ? strlen($encoded) : 0,
             ]);
             abort_unless($encoded, 502, 'Image provider returned no image data.');
-            $path = 'cards/generated/jpg/card-'.$card->id.'-'.now()->format('YmdHis').'.jpg';
+            $path = 'cards/generated/webp/card-'.$card->id.'-'.now()->format('YmdHis').'.webp';
             $image = base64_decode($encoded, true);
             abort_unless($image !== false, 502, 'Image provider returned invalid image data.');
             $originalBytes = strlen($image);
-            $jpeg = $this->convertGeneratedImageToJpeg($image);
+            $webp = $this->convertGeneratedImageToWebp($image);
             Log::info('CMS artwork generation optimized image', $logContext + [
                 'original_image_bytes' => $originalBytes,
-                'jpeg_bytes' => strlen($jpeg),
+                'webp_bytes' => strlen($webp),
                 'storage_path' => $path,
             ]);
-            abort_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, 502, 'Generated JPEG could not be optimized below 100 KB without unacceptable quality loss. Please generate it again.');
-            Storage::disk('public')->put($path, $jpeg);
-            abort_unless(Storage::disk('public')->exists($path), 500, 'Generated PNG was not found after writing it to storage.');
+            abort_if(strlen($webp) > self::MAX_GENERATED_JPEG_BYTES, 502, 'Generated WebP could not be optimized below 100 KB without unacceptable quality loss. Please generate it again.');
+            Storage::disk('public')->put($path, $webp);
+            abort_unless(Storage::disk('public')->exists($path), 500, 'Generated WebP was not found after writing it to storage.');
             $this->deleteManagedImage($card->image);
             $card->update(['image' => $path, 'artwork_enhanced' => false]);
         } catch (Throwable $error) {
@@ -603,12 +603,12 @@ class CardController extends Controller
             ? ' Cost: $'.number_format($generationCost, 6, '.', '').'.'
             : '';
 
-        $message = 'Black-background JPEG artwork generated via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').'. Adjust the square crop, then save it.'.$costMessage." [Generation: {$generationId}]";
+        $message = 'Black-background WebP artwork generated via '.($providerUsed === 'gemini-fallback' ? 'direct Gemini fallback' : 'OpenRouter').'. Adjust the square crop if needed.'.$costMessage." [Generation: {$generationId}]";
         if ($request->expectsJson()) {
             return response()->json([
                 'image' => url('/card-images/'.$path),
-                'bytes' => strlen($jpeg),
-                'extension' => 'JPG',
+                'bytes' => strlen($webp),
+                'extension' => 'WEBP',
                 'message' => $message,
                 'generation_id' => $generationId,
             ]);
@@ -1182,9 +1182,9 @@ class CardController extends Controller
         return $svg;
     }
 
-    private function convertGeneratedImageToJpeg(string $image): string
+    private function convertGeneratedImageToWebp(string $image): string
     {
-        abort_unless(function_exists('imagecreatefromstring'), 502, 'GD is unavailable for JPEG conversion.');
+        abort_unless(function_exists('imagecreatefromstring') && function_exists('imagewebp'), 502, 'GD WebP support is unavailable.');
         $source = @imagecreatefromstring($image);
         abort_unless($source !== false, 502, 'Generated image could not be decoded.');
         $source = $this->removeDetectedBrightFrame($source);
@@ -1192,17 +1192,17 @@ class CardController extends Controller
 
         $sourceWidth = imagesx($source);
         $sourceHeight = imagesy($source);
-        $jpegCanvas = imagecreatetruecolor($sourceWidth, $sourceHeight);
-        $black = imagecolorallocate($jpegCanvas, 0, 0, 0);
-        imagefill($jpegCanvas, 0, 0, $black);
-        imagealphablending($jpegCanvas, true);
-        imagecopy($jpegCanvas, $source, 0, 0, 0, 0, $sourceWidth, $sourceHeight);
+        $webpCanvas = imagecreatetruecolor($sourceWidth, $sourceHeight);
+        $black = imagecolorallocate($webpCanvas, 0, 0, 0);
+        imagefill($webpCanvas, 0, 0, $black);
+        imagealphablending($webpCanvas, true);
+        imagecopy($webpCanvas, $source, 0, 0, 0, 0, $sourceWidth, $sourceHeight);
 
-        $result = $this->encodeCardJpeg($jpegCanvas);
+        $result = $this->encodeCardWebp($webpCanvas);
         imagedestroy($source);
-        imagedestroy($jpegCanvas);
+        imagedestroy($webpCanvas);
 
-        abort_unless(is_string($result) && $result !== '', 502, 'Generated image could not be encoded as JPEG.');
+        abort_unless(is_string($result) && $result !== '', 502, 'Generated image could not be encoded as WebP.');
 
         return $result;
     }

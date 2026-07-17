@@ -344,7 +344,7 @@ class CmsTest extends TestCase
         });
     }
 
-    public function test_generate_action_saves_black_background_jpeg_path_on_card(): void
+    public function test_generate_action_saves_black_background_webp_path_on_card(): void
     {
         Storage::fake('public');
         config([
@@ -367,7 +367,7 @@ class CmsTest extends TestCase
             ->assertSessionHas('crop_generated_artwork', fn (array $crop) => (int) $crop['card_id'] === $card->id && filled($crop['path']));
         $path = $card->fresh()->image;
         Storage::disk('public')->assertExists($path);
-        $this->assertStringEndsWith('.jpg', $path);
+        $this->assertStringEndsWith('.webp', $path);
         $this->assertLessThanOrEqual(100 * 1024, strlen(Storage::disk('public')->get($path)));
         $this->withServerVariables($server)->get('/cms/cards/'.$card->id.'/edit')
             ->assertOk()
@@ -376,7 +376,7 @@ class CmsTest extends TestCase
         $inlineCard = Card::create(['title' => 'Inline generation', 'score' => 14, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
         $this->withServerVariables($server)->postJson('/cms/cards/'.$inlineCard->id.'/generate')
             ->assertOk()
-            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/jpg/card-'.$inlineCard->id.'-'));
+            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/webp/card-'.$inlineCard->id.'-'));
         $this->assertNotSame('0', $inlineCard->fresh()->image);
         Http::assertSent(function ($request) {
             $reference = $request['input_references'][0]['image_url']['url'];
@@ -386,7 +386,7 @@ class CmsTest extends TestCase
             && $request['model'] === 'openai/gpt-image-1'
             && $request['quality'] === 'high'
             && $request['background'] === 'opaque'
-            && $request['output_format'] === 'jpeg'
+            && $request['output_format'] === 'webp'
             && count($request['input_references']) === 5
             && str_starts_with($request['input_references'][1]['image_url']['url'], 'data:image/jpeg;base64,')
             && str_starts_with($request['input_references'][2]['image_url']['url'], 'data:image/jpeg;base64,')
