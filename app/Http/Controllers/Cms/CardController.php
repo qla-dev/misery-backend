@@ -29,14 +29,22 @@ class CardController extends Controller
             $query->where(fn ($q) => $q->where('title', 'like', "%{$search}%")->orWhere('subtitle', 'like', "%{$search}%"));
         })->when($request->filled('status'), fn ($query) => $query->where('status', $request->boolean('status')))
             ->when($request->filled('enhanced'), fn ($query) => $query->where('artwork_enhanced', $request->boolean('enhanced')))
-            ->when($request->filled('stack'), fn ($query) => $query->where('stack_id', $request->integer('stack')));
+            ->when($request->filled('stack'), fn ($query) => $query->where('stack_id', $request->integer('stack')))
+            ->when($request->string('format')->toString() === 'webp', fn ($query) => $query->whereRaw('LOWER(image) LIKE ?', ['%.webp']))
+            ->when($request->string('format')->toString() === 'jpg', fn ($query) => $query->where(function ($query) {
+                $query->whereRaw('LOWER(image) LIKE ?', ['%.jpg'])->orWhereRaw('LOWER(image) LIKE ?', ['%.jpeg']);
+            }));
 
-        $sortByWeight = $request->string('sort')->toString() === 'artwork_weight';
-        if ($sortByWeight) {
+        $sort = $request->string('sort')->toString();
+        if (in_array($sort, ['artwork_weight', 'artwork_format'], true)) {
             $direction = $request->string('direction')->lower()->toString() === 'desc' ? 'desc' : 'asc';
             $allCards = $cardQuery->get()->each(function (Card $card) {
-                $card->setAttribute('artwork_bytes', $this->artworkBytes($card->image));
-            })->sortBy(fn (Card $card) => $card->artwork_bytes ?? -1, SORT_NUMERIC, $direction === 'desc')->values();
+                $this->addArtworkMetadata($card);
+            })->sortBy(
+                fn (Card $card) => $sort === 'artwork_format' ? $card->artwork_extension : ($card->artwork_bytes ?? -1),
+                $sort === 'artwork_format' ? SORT_NATURAL : SORT_NUMERIC,
+                $direction === 'desc'
+            )->values();
             $perPage = 25;
             $page = max(1, LengthAwarePaginator::resolveCurrentPage());
             $cards = new LengthAwarePaginator(
@@ -49,7 +57,7 @@ class CardController extends Controller
         } else {
             $cards = $cardQuery->orderBy('score')->paginate(25)->withQueryString();
             $cards->getCollection()->each(function (Card $card) {
-                $card->setAttribute('artwork_bytes', $this->artworkBytes($card->image));
+                $this->addArtworkMetadata($card);
             });
         }
         $stacks = Stack::query()->orderBy('name')->get();
@@ -58,6 +66,24 @@ class CardController extends Controller
             ->orderBy('title')->get(['id', 'title', 'image', 'artwork_enhanced']);
 
         return view('cms.cards.index', compact('artworks', 'cards', 'stacks'));
+    }
+
+    private function addArtworkMetadata(Card $card): void
+    {
+        $card->setAttribute('artwork_bytes', $this->artworkBytes($card->image));
+        $card->setAttribute('artwork_extension', $this->artworkExtension($card->image));
+    }
+
+    private function artworkExtension(?string $path): string
+    {
+        if (! $path || $path === '0') return '—';
+        $extension = strtolower((string) pathinfo((string) (parse_url($path, PHP_URL_PATH) ?: $path), PATHINFO_EXTENSION));
+        return match ($extension) {
+            'jpeg', 'jpg' => 'JPG',
+            'webp' => 'WEBP',
+            'png' => 'PNG',
+            default => $extension !== '' ? strtoupper($extension) : '—',
+        };
     }
 
     private function artworkBytes(?string $path): ?int

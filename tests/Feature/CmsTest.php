@@ -33,7 +33,9 @@ class CmsTest extends TestCase
             ->assertSee('Export')
             ->assertSee('Generate')
             ->assertSee('Enhance selected')
-            ->assertSee('Weight')
+            ->assertSee('Size')
+            ->assertSee('Format')
+            ->assertSee('All formats')
             ->assertSee('Bosnian translate selected')
             ->assertSee('selectVisibleCards', false)
             ->assertSee('tabTop=footerTop+115', false)
@@ -71,6 +73,30 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)->get('/cms/cards?sort=artwork_weight&direction=asc')
             ->assertOk()
             ->assertSeeInOrder(['Small artwork', 'Large artwork']);
+    }
+
+    public function test_cms_displays_filters_and_sorts_artwork_format_with_translation_status(): void
+    {
+        Storage::fake('public');
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        Storage::disk('public')->put('cards/example.jpg', 'jpg');
+        Storage::disk('public')->put('cards/example.webp', 'webp');
+        Card::create(['title' => 'JPEG card', 'subtitle' => 'Copy', 'score' => 10, 'image' => 'cards/example.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        Card::create(['title' => 'WebP card', 'subtitle' => 'Copy', 'title_bs' => 'WebP kartica', 'subtitle_bs' => 'Tekst', 'score' => 20, 'image' => 'cards/example.webp', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->get('/cms/cards?sort=artwork_format&direction=asc')
+            ->assertOk()
+            ->assertSee('JPG')
+            ->assertSee('WEBP')
+            ->assertSee('TRANSLATED')
+            ->assertSee('NOT TRANSLATED')
+            ->assertSeeInOrder(['JPEG card', 'WebP card']);
+
+        $this->withServerVariables($server)->get('/cms/cards?format=webp')
+            ->assertOk()
+            ->assertSee('WebP card')
+            ->assertDontSee('data-title="JPEG card"', false);
     }
 
     public function test_cms_filters_cards_by_artwork_enhancement_state(): void
