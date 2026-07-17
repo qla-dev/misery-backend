@@ -11,6 +11,7 @@ use DOMElement;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -30,8 +31,11 @@ class CardController extends Controller
             ->when($request->filled('stack'), fn ($query) => $query->where('stack_id', $request->integer('stack')))
             ->orderBy('score')->paginate(25)->withQueryString();
         $stacks = Stack::query()->orderBy('name')->get();
+        $artworks = Card::query()
+            ->whereNotNull('image')->where('image', '!=', '0')->where('image', '!=', '')
+            ->orderBy('title')->get(['id', 'title', 'image', 'artwork_enhanced']);
 
-        return view('cms.cards.index', compact('cards', 'stacks'));
+        return view('cms.cards.index', compact('artworks', 'cards', 'stacks'));
     }
 
     public function create()
@@ -84,11 +88,63 @@ class CardController extends Controller
 
     public function destroy(Card $card)
     {
-        $this->deleteManagedImage($card->image);
+        $image = $card->image;
         $this->deleteManagedSvg($card->svg_img);
         $card->delete();
+        $this->deleteManagedImageIfUnused($image);
 
         return redirect()->route('cms.cards.index')->with('success', 'Card deleted.');
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:cards,id']]);
+        $cards = Card::query()->whereKey($data['ids'])->get();
+        $images = $cards->pluck('image')->filter()->unique()->values();
+        $svgs = $cards->pluck('svg_img')->filter()->unique()->values();
+
+        DB::transaction(fn () => Card::query()->whereKey($cards->modelKeys())->delete());
+        $images->each(fn ($path) => $this->deleteManagedImageIfUnused($path));
+        $svgs->each(fn ($path) => $this->deleteManagedSvg($path));
+
+        return response()->json(['deleted' => $cards->count(), 'ids' => $cards->modelKeys()]);
+    }
+
+    public function assignArtwork(Request $request, Card $card)
+    {
+        $data = $request->validate(['source_card_id' => ['required', 'integer', 'different:'.$card->id, 'exists:cards,id']]);
+        $source = Card::query()->findOrFail($data['source_card_id']);
+        abort_if(blank($source->image) || $source->image === '0', 422, 'The selected artwork is unavailable.');
+        $previousImage = $card->image;
+        $card->update(['image' => $source->image, 'artwork_enhanced' => $source->artwork_enhanced]);
+        $this->deleteManagedImageIfUnused($previousImage);
+
+        return response()->json([
+            'card_id' => $card->id,
+            'image' => $this->cardImageUrl($card->image),
+            'artwork_enhanced' => $card->artwork_enhanced,
+        ]);
+    }
+
+    public function swapArtwork(Request $request)
+    {
+        $data = $request->validate(['ids' => ['required', 'array', 'size:2'], 'ids.*' => ['integer', 'distinct', 'exists:cards,id']]);
+        $cards = Card::query()->whereKey($data['ids'])->get()->keyBy('id');
+        $first = $cards->get((int) $data['ids'][0]);
+        $second = $cards->get((int) $data['ids'][1]);
+        abort_if(blank($first->image) || $first->image === '0' || blank($second->image) || $second->image === '0', 422, 'Both selected cards must have artwork to swap.');
+
+        DB::transaction(function () use ($first, $second) {
+            [$firstImage, $firstEnhanced] = [$first->image, $first->artwork_enhanced];
+            $first->update(['image' => $second->image, 'artwork_enhanced' => $second->artwork_enhanced]);
+            $second->update(['image' => $firstImage, 'artwork_enhanced' => $firstEnhanced]);
+        });
+
+        return response()->json(['cards' => collect([$first->fresh(), $second->fresh()])->map(fn (Card $item) => [
+            'id' => $item->id,
+            'image' => $this->cardImageUrl($item->image),
+            'artwork_enhanced' => $item->artwork_enhanced,
+        ])->values()]);
     }
 
     public function setStatus(Request $request, Card $card)
@@ -1320,6 +1376,26 @@ class CardController extends Controller
         if ($path && ! Str::startsWith($path, ['http://', 'https://']) && $path !== '0') {
             Storage::disk('public')->delete(preg_replace('#^storage/#', '', ltrim($path, '/')));
         }
+    }
+
+    private function deleteManagedImageIfUnused(?string $path): void
+    {
+        if (! $path || Card::query()->where('image', $path)->exists()) {
+            return;
+        }
+
+        $this->deleteManagedImage($path);
+    }
+
+    private function cardImageUrl(?string $path): ?string
+    {
+        if (! $path || $path === '0') {
+            return null;
+        }
+
+        return Str::startsWith($path, ['http://', 'https://'])
+            ? $path
+            : url('/card-images/'.preg_replace('#^storage/#', '', ltrim($path, '/')));
     }
 
     private function deleteManagedSvg(?string $path): void

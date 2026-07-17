@@ -133,6 +133,9 @@ Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
         ]);
     })->name('native-card-artwork');
     Route::resource('cards', CmsCardController::class)->except('show');
+    Route::post('cards/bulk-destroy', [CmsCardController::class, 'bulkDestroy'])->name('cards.bulk-destroy');
+    Route::post('cards/swap-artwork', [CmsCardController::class, 'swapArtwork'])->name('cards.swap-artwork');
+    Route::post('cards/{card}/assign-artwork', [CmsCardController::class, 'assignArtwork'])->name('cards.assign-artwork');
     Route::patch('cards/{card}/score', [CmsCardController::class, 'updateScore'])->name('cards.score');
     Route::post('cards/{card}/generate', [CmsCardController::class, 'generate'])->name('cards.generate');
     Route::post('cards/{card}/translate-bs', [CmsCardController::class, 'translateToBosnian'])->name('cards.translate-bs');

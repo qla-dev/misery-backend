@@ -122,6 +122,49 @@ class CmsTest extends TestCase
             ->assertJsonValidationErrors('score');
     }
 
+    public function test_cms_card_list_exposes_bulk_and_quick_artwork_controls(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        Card::create(['title' => 'Artwork controls', 'score' => 20, 'image' => 'cards/uploads/control.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->get('/cms/cards')->assertOk()
+            ->assertSee('Delete selected')
+            ->assertSee('Swap artwork')
+            ->assertSee('data-change-artwork', false)
+            ->assertSee('artworkPicker', false)
+            ->assertSee('art-thumb__preview', false);
+    }
+
+    public function test_cms_can_assign_swap_and_bulk_delete_card_artwork_safely(): void
+    {
+        Storage::fake('public');
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        Storage::disk('public')->put('cards/uploads/one.jpg', 'one');
+        Storage::disk('public')->put('cards/uploads/two.jpg', 'two');
+        $first = Card::create(['title' => 'First art', 'score' => 10, 'image' => 'cards/uploads/one.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $second = Card::create(['title' => 'Second art', 'score' => 20, 'image' => 'cards/uploads/two.jpg', 'artwork_enhanced' => true, 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $third = Card::create(['title' => 'Third art', 'score' => 30, 'image' => 'cards/uploads/one.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->postJson('/cms/cards/'.$third->id.'/assign-artwork', ['source_card_id' => $second->id])
+            ->assertOk()->assertJsonPath('artwork_enhanced', true);
+        $this->assertSame('cards/uploads/two.jpg', $third->fresh()->image);
+        Storage::disk('public')->assertExists('cards/uploads/one.jpg');
+
+        $this->withServerVariables($server)->postJson('/cms/cards/swap-artwork', ['ids' => [$first->id, $second->id]])
+            ->assertOk()->assertJsonCount(2, 'cards');
+        $this->assertSame('cards/uploads/two.jpg', $first->fresh()->image);
+        $this->assertSame('cards/uploads/one.jpg', $second->fresh()->image);
+
+        $this->withServerVariables($server)->postJson('/cms/cards/bulk-destroy', ['ids' => [$first->id, $third->id]])
+            ->assertOk()->assertJsonPath('deleted', 2);
+        $this->assertDatabaseMissing('cards', ['id' => $first->id]);
+        $this->assertDatabaseMissing('cards', ['id' => $third->id]);
+        Storage::disk('public')->assertExists('cards/uploads/one.jpg');
+        Storage::disk('public')->assertMissing('cards/uploads/two.jpg');
+    }
+
     public function test_cms_updates_stack_presentation_exposed_to_native_clients(): void
     {
         $stack = Stack::where('slug', 'normal')->firstOrFail();
