@@ -187,6 +187,8 @@ class CardController extends Controller
             'card_id' => $card->id,
             'image' => $this->cardImageUrl($card->image),
             'artwork_enhanced' => $card->artwork_enhanced,
+            'bytes' => $this->artworkBytes($card->image),
+            'extension' => $this->artworkExtension($card->image),
         ]);
     }
 
@@ -208,6 +210,8 @@ class CardController extends Controller
             'id' => $item->id,
             'image' => $this->cardImageUrl($item->image),
             'artwork_enhanced' => $item->artwork_enhanced,
+            'bytes' => $this->artworkBytes($item->image),
+            'extension' => $this->artworkExtension($item->image),
         ])->values()]);
     }
 
@@ -585,6 +589,8 @@ class CardController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'image' => url('/card-images/'.$path),
+                'bytes' => strlen($jpeg),
+                'extension' => 'JPG',
                 'message' => $message,
                 'generation_id' => $generationId,
             ]);
@@ -639,6 +645,8 @@ class CardController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'image' => url('/card-images/'.$path),
+                'bytes' => strlen($webp),
+                'extension' => 'WEBP',
                 'message' => '768 × 768 WebP artwork crop saved.',
             ]);
         }
@@ -664,6 +672,7 @@ class CardController extends Controller
 
         return response()->json([
             'bytes' => strlen($webp),
+            'extension' => 'WEBP',
             'dimensions' => '768x768',
             'image' => url('/card-images/'.$path),
             'message' => 'Artwork converted to 768 × 768 WebP.',
@@ -752,6 +761,8 @@ class CardController extends Controller
         return $request->expectsJson()
             ? response()->json([
                 'image' => url('/card-images/'.$path),
+                'bytes' => strlen($jpeg),
+                'extension' => 'JPG',
                 'message' => $message,
             ])
             : redirect($this->cardEditUrl($request, $card))->with('success', $message);

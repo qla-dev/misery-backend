@@ -179,6 +179,7 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)->get('/cms/cards')->assertOk()
             ->assertSee('Delete selected')
             ->assertSee('Swap artwork')
+            ->assertSee('Convert selected to WebP')
             ->assertSee('data-change-artwork', false)
             ->assertSee('artworkPicker', false)
             ->assertSee('art-thumb__preview', false);
