@@ -32,11 +32,12 @@ class CmsTest extends TestCase
             ->assertSee('Unenhanced')
             ->assertSee('Export')
             ->assertSee('Generate')
-            ->assertSee('Enhance selected')
+            ->assertSee('>Enhance</button>', false)
             ->assertSee('Size')
             ->assertSee('Format')
             ->assertSee('All formats')
-            ->assertSee('Bosnian translate selected')
+            ->assertSee('Translate to Bosnian')
+            ->assertSee('Change status')
             ->assertSee('selectVisibleCards', false)
             ->assertSee('tabTop=footerTop+115', false)
             ->assertSee('labelY=(footerTop+tabTop)/2', false)
@@ -100,6 +101,11 @@ class CmsTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['>ID ↓</a>', '>Art</th>'], false)
             ->assertSeeInOrder(['data-card-id="'.$second->id.'"', 'data-card-id="'.$first->id.'"'], false);
+
+        $this->withServerVariables($server)->get('/cms/cards?sort=score&direction=asc')
+            ->assertOk()
+            ->assertSeeInOrder(['data-card-id="'.$second->id.'"', 'data-card-id="'.$first->id.'"'], false)
+            ->assertSee('>Score ↑</a>', false);
     }
 
     public function test_cms_displays_filters_and_sorts_artwork_format_with_translation_status(): void
@@ -204,9 +210,9 @@ class CmsTest extends TestCase
         $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
 
         $this->withServerVariables($server)->get('/cms/cards')->assertOk()
-            ->assertSee('Delete selected')
+            ->assertSee('>Delete</button>', false)
             ->assertSee('Swap artwork')
-            ->assertSee('Convert selected to WebP')
+            ->assertSee('Convert to WebP')
             ->assertSee('artwork-format-download', false)
             ->assertSee('data-change-artwork', false)
             ->assertSee('artworkPicker', false)

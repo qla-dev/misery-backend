@@ -54,9 +54,9 @@ class CardController extends Controller
                 $page,
                 ['path' => $request->url(), 'query' => $request->query()]
             );
-        } elseif ($sort === 'card_id') {
+        } elseif (in_array($sort, ['card_id', 'score'], true)) {
             $direction = $request->string('direction')->lower()->toString() === 'desc' ? 'desc' : 'asc';
-            $cards = $cardQuery->orderBy('id', $direction)->paginate(25)->withQueryString();
+            $cards = $cardQuery->orderBy($sort === 'card_id' ? 'id' : 'score', $direction)->paginate(25)->withQueryString();
             $cards->getCollection()->each(function (Card $card) {
                 $this->addArtworkMetadata($card);
             });
@@ -229,6 +229,14 @@ class CardController extends Controller
     {
         $data = $request->validate(['status' => ['required', 'boolean']]);
         $card->update(['status' => (bool) $data['status']]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'id' => $card->id,
+                'status' => $card->status,
+                'label' => $card->status ? 'APPROVED' : 'DRAFT',
+            ]);
+        }
 
         return back()->with('success', $card->status ? 'Card approved.' : 'Card returned to draft.');
     }
