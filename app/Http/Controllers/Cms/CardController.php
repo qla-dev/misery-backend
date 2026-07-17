@@ -548,7 +548,7 @@ class CardController extends Controller
                 'encoded_image_bytes' => is_string($encoded) ? strlen($encoded) : 0,
             ]);
             abort_unless($encoded, 502, 'Image provider returned no image data.');
-            $path = 'cards/generated/card-'.$card->id.'-'.now()->format('YmdHis').'.jpg';
+            $path = 'cards/generated/jpg/card-'.$card->id.'-'.now()->format('YmdHis').'.jpg';
             $image = base64_decode($encoded, true);
             abort_unless($image !== false, 502, 'Image provider returned invalid image data.');
             $originalBytes = strlen($image);
@@ -626,7 +626,7 @@ class CardController extends Controller
         $webp = $this->convertImageToWebp($image, 768, 422);
         abort_if(strlen($webp) > self::MAX_GENERATED_JPEG_BYTES, 422, 'The cropped WebP could not be optimized below 100 KB. Please zoom or crop it again.');
 
-        $path = 'cards/generated/card-'.$card->id.'-cropped-'.Str::uuid().'.webp';
+        $path = 'cards/generated/webp/card-'.$card->id.'-cropped-'.Str::uuid().'.webp';
         Storage::disk('public')->put($path, $webp);
         abort_unless(Storage::disk('public')->exists($path), 500, 'The cropped artwork was not found after writing it to storage.');
 
@@ -663,7 +663,7 @@ class CardController extends Controller
 
         $webp = $this->convertImageToWebp(Storage::disk('public')->get($storagePath), 768, 422);
         abort_if(strlen($webp) > self::MAX_GENERATED_JPEG_BYTES, 422, 'The WebP artwork could not be optimized below 100 KB.');
-        $path = 'cards/generated/card-'.$card->id.'-'.Str::uuid().'.webp';
+        $path = 'cards/generated/webp/card-'.$card->id.'-'.Str::uuid().'.webp';
         Storage::disk('public')->put($path, $webp);
         abort_unless(Storage::disk('public')->exists($path), 500, 'The converted WebP artwork was not found after writing it to storage.');
 
@@ -739,7 +739,7 @@ class CardController extends Controller
                 : redirect($this->cardEditUrl($request, $card))->withErrors(['generation' => $message]);
         }
 
-        $path = 'cards/generated/card-'.$card->id.'-enhanced-'.Str::uuid().'.jpg';
+        $path = 'cards/generated/jpg/card-'.$card->id.'-enhanced-'.Str::uuid().'.jpg';
         Storage::disk('public')->put($path, $jpeg);
         abort_unless(Storage::disk('public')->exists($path), 500, 'Enhanced artwork was not found after writing it to storage.');
 
@@ -1475,7 +1475,14 @@ class CardController extends Controller
             return;
         }
         $this->deleteManagedImage($card->image);
-        $path = $request->file('image_upload')->store('cards/uploads', 'public');
+        $upload = $request->file('image_upload');
+        $extension = Str::lower($upload->guessExtension() ?: $upload->getClientOriginalExtension());
+        $formatFolder = match ($extension) {
+            'webp' => 'webp',
+            'jpg', 'jpeg' => 'jpg',
+            default => 'other',
+        };
+        $path = $upload->store('cards/uploads/'.$formatFolder, 'public');
         $card->update(['image' => $path, 'artwork_enhanced' => false]);
     }
 

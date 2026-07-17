@@ -342,7 +342,7 @@ class CmsTest extends TestCase
         $inlineCard = Card::create(['title' => 'Inline generation', 'score' => 14, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
         $this->withServerVariables($server)->postJson('/cms/cards/'.$inlineCard->id.'/generate')
             ->assertOk()
-            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/card-'.$inlineCard->id.'-'));
+            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/jpg/card-'.$inlineCard->id.'-'));
         $this->assertNotSame('0', $inlineCard->fresh()->image);
         Http::assertSent(function ($request) {
             $reference = $request['input_references'][0]['image_url']['url'];
@@ -605,7 +605,7 @@ class CmsTest extends TestCase
             'crop_data' => 'data:image/jpeg;base64,'.base64_encode($jpeg),
         ])->assertOk()
             ->assertJsonPath('message', '768 × 768 WebP artwork crop saved.')
-            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/card-'.$card->id.'-cropped-'));
+            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/webp/card-'.$card->id.'-cropped-'));
     }
 
     public function test_cms_can_convert_existing_artwork_to_768_webp(): void
@@ -681,7 +681,7 @@ class CmsTest extends TestCase
             ->postJson('/cms/cards/'.$card->id.'/enhance-artwork')
             ->assertOk()
             ->assertJsonPath('message', 'Artwork enhanced with Gemini via OpenRouter using google/gemini-image-test, then optimized to 1024 × 1024 below 100 KB.')
-            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/card-'.$card->id.'-enhanced-'));
+            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/jpg/card-'.$card->id.'-enhanced-'));
 
         $enhancedPath = $card->fresh()->image;
         $this->assertTrue($card->fresh()->artwork_enhanced);
