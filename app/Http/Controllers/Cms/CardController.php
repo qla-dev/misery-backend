@@ -67,11 +67,23 @@ class CardController extends Controller
             });
         }
         $stacks = Stack::query()->orderBy('name')->get();
-        $artworks = Card::query()
-            ->whereNotNull('image')->where('image', '!=', '0')->where('image', '!=', '')
-            ->orderBy('title')->get(['id', 'title', 'image', 'artwork_enhanced']);
+        $assets = collect(Storage::disk('public')->allFiles('cards'))
+            ->filter(fn (string $path) => in_array(Str::lower(pathinfo($path, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'webp', 'png', 'gif', 'avif'], true))
+            ->map(function (string $path): array {
+                $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
 
-        return view('cms.cards.index', compact('artworks', 'cards', 'stacks'));
+                return [
+                    'path' => $path,
+                    'url' => url('/card-images/'.$path),
+                    'folder' => dirname($path),
+                    'filename' => basename($path),
+                    'format' => in_array($extension, ['jpg', 'jpeg'], true) ? 'jpg' : ($extension === 'webp' ? 'webp' : 'other'),
+                ];
+            })
+            ->sortBy(fn (array $asset) => $asset['folder'].'/'.$asset['filename'], SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+
+        return view('cms.cards.index', compact('assets', 'cards', 'stacks'));
     }
 
     private function addArtworkMetadata(Card $card): void
@@ -186,12 +198,14 @@ class CardController extends Controller
 
     public function assignArtwork(Request $request, Card $card)
     {
-        $data = $request->validate(['source_card_id' => ['required', 'integer', 'different:'.$card->id, 'exists:cards,id']]);
-        $source = Card::query()->findOrFail($data['source_card_id']);
-        abort_if(blank($source->image) || $source->image === '0', 422, 'The selected artwork is unavailable.');
-        $previousImage = $card->image;
-        $card->update(['image' => $source->image, 'artwork_enhanced' => $source->artwork_enhanced]);
-        $this->deleteManagedImageIfUnused($previousImage);
+        $data = $request->validate(['asset_path' => ['required', 'string', 'max:2048']]);
+        $path = str_replace('\\', '/', ltrim($data['asset_path'], '/'));
+        $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
+        abort_if(str_contains($path, '../') || ! Str::startsWith($path, 'cards/'), 422, 'The selected asset path is invalid.');
+        abort_unless(in_array($extension, ['jpg', 'jpeg', 'webp', 'png', 'gif', 'avif'], true), 422, 'The selected asset is not a supported image.');
+        abort_unless(Storage::disk('public')->exists($path), 422, 'The selected asset is unavailable.');
+
+        $card->update(['image' => $path, 'artwork_enhanced' => str_contains(Str::lower($path), '-enhanced-')]);
 
         return response()->json([
             'card_id' => $card->id,

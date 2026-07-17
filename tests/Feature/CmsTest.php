@@ -216,6 +216,9 @@ class CmsTest extends TestCase
             ->assertSee('artwork-format-download', false)
             ->assertSee('data-change-artwork', false)
             ->assertSee('artworkPicker', false)
+            ->assertSee('data-asset-filter="jpg"', false)
+            ->assertSee('data-asset-filter="webp"', false)
+            ->assertSee('data-asset-filter="other"', false)
             ->assertSee('art-thumb__preview', false);
     }
 
@@ -230,8 +233,12 @@ class CmsTest extends TestCase
         $third = Card::create(['title' => 'Third art', 'score' => 30, 'image' => 'cards/uploads/one.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
         $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
 
-        $this->withServerVariables($server)->postJson('/cms/cards/'.$third->id.'/assign-artwork', ['source_card_id' => $second->id])
-            ->assertOk()->assertJsonPath('artwork_enhanced', true);
+        $this->withServerVariables($server)->get('/cms/cards')->assertOk()
+            ->assertSee('data-asset-path="cards/uploads/one.jpg"', false)
+            ->assertSee('data-asset-path="cards/uploads/two.jpg"', false);
+
+        $this->withServerVariables($server)->postJson('/cms/cards/'.$third->id.'/assign-artwork', ['asset_path' => 'cards/uploads/two.jpg'])
+            ->assertOk()->assertJsonPath('artwork_enhanced', false);
         $this->assertSame('cards/uploads/two.jpg', $third->fresh()->image);
         Storage::disk('public')->assertExists('cards/uploads/one.jpg');
 
