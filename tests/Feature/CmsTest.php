@@ -708,12 +708,14 @@ class CmsTest extends TestCase
         $this->withServerVariables($server)
             ->postJson('/cms/cards/'.$card->id.'/enhance-artwork')
             ->assertOk()
-            ->assertJsonPath('message', 'Artwork enhanced with Gemini via OpenRouter using google/gemini-image-test, then optimized to 1024 × 1024 below 100 KB.')
-            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/jpg/card-'.$card->id.'-enhanced-'));
+            ->assertJsonPath('message', 'Artwork enhanced with Gemini via OpenRouter using google/gemini-image-test, then saved as 1024 × 1024 WebP below 100 KB.')
+            ->assertJsonPath('extension', 'WEBP')
+            ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/webp/card-'.$card->id.'-enhanced-'));
 
         $enhancedPath = $card->fresh()->image;
         $this->assertTrue($card->fresh()->artwork_enhanced);
         $this->assertStringContainsString('-enhanced-', $enhancedPath);
+        $this->assertStringEndsWith('.webp', $enhancedPath);
         Storage::disk('public')->assertMissing($originalPath);
         Storage::disk('public')->assertExists($enhancedPath);
         $enhancedBytes = Storage::disk('public')->get($enhancedPath);
@@ -727,6 +729,7 @@ class CmsTest extends TestCase
         $this->assertEqualsWithDelta(204, ($center >> 8) & 0xFF, 15);
         $this->assertEqualsWithDelta(21, $center & 0xFF, 15);
         imagedestroy($enhanced);
+        $this->get('/card-images/'.$enhancedPath)->assertOk()->assertHeader('Content-Type', 'image/webp');
         Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/images'
             && $request['model'] === 'google/gemini-image-test'
             && $request['aspect_ratio'] === '1:1'

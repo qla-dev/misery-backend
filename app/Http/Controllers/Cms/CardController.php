@@ -733,9 +733,9 @@ class CardController extends Controller
             $enhanced = $this->enhanceCardArtwork($generatedSource);
             imagedestroy($generatedSource);
             $enhanced = $this->normalizeEnhancedArtworkColors($enhanced);
-            $jpeg = $this->encodeCardJpeg($enhanced);
+            $webp = $this->encodeCardWebp($enhanced);
             imagedestroy($enhanced);
-            throw_if(strlen($jpeg) > self::MAX_GENERATED_JPEG_BYTES, RuntimeException::class, 'Enhanced artwork could not be optimized below 100 KB.');
+            throw_if(strlen($webp) > self::MAX_GENERATED_JPEG_BYTES, RuntimeException::class, 'Enhanced WebP artwork could not be optimized below 100 KB.');
         } catch (Throwable $error) {
             Log::error('CMS Gemini card artwork enhancement failed', [
                 'card_id' => $card->id,
@@ -749,8 +749,8 @@ class CardController extends Controller
                 : redirect($this->cardEditUrl($request, $card))->withErrors(['generation' => $message]);
         }
 
-        $path = 'cards/generated/jpg/card-'.$card->id.'-enhanced-'.Str::uuid().'.jpg';
-        Storage::disk('public')->put($path, $jpeg);
+        $path = 'cards/generated/webp/card-'.$card->id.'-enhanced-'.Str::uuid().'.webp';
+        Storage::disk('public')->put($path, $webp);
         abort_unless(Storage::disk('public')->exists($path), 500, 'Enhanced artwork was not found after writing it to storage.');
 
         $card->update(['image' => $path, 'artwork_enhanced' => true]);
@@ -760,19 +760,19 @@ class CardController extends Controller
             'card_id' => $card->id,
             'source_dimensions' => $width.'x'.$height,
             'source_bytes' => strlen($original),
-            'jpeg_bytes' => strlen($jpeg),
+            'webp_bytes' => strlen($webp),
             'storage_path' => $path,
             'provider' => $generated['provider'],
             'model' => $generated['model'],
         ]);
 
-        $message = 'Artwork enhanced with '.$generated['provider'].' using '.$generated['model'].', then optimized to 1024 × 1024 below 100 KB.';
+        $message = 'Artwork enhanced with '.$generated['provider'].' using '.$generated['model'].', then saved as 1024 × 1024 WebP below 100 KB.';
 
         return $request->expectsJson()
             ? response()->json([
                 'image' => url('/card-images/'.$path),
-                'bytes' => strlen($jpeg),
-                'extension' => 'JPG',
+                'bytes' => strlen($webp),
+                'extension' => 'WEBP',
                 'message' => $message,
             ])
             : redirect($this->cardEditUrl($request, $card))->with('success', $message);
@@ -1245,6 +1245,26 @@ class CardController extends Controller
             imagejpeg($source, null, $quality);
             $encoded = ob_get_clean();
             abort_unless(is_string($encoded) && $encoded !== '', 500, 'Card artwork could not be encoded as JPEG.');
+            $result = $encoded;
+
+            if (strlen($result) <= self::MAX_GENERATED_JPEG_BYTES) {
+                break;
+            }
+        }
+
+        return $result;
+    }
+
+    private function encodeCardWebp(\GdImage $source): string
+    {
+        abort_unless(function_exists('imagewebp'), 500, 'GD WebP support is unavailable.');
+        $result = '';
+
+        foreach ([90, 86, 82, 78, 74, 70, 66, 62, 58, 54] as $quality) {
+            ob_start();
+            imagewebp($source, null, $quality);
+            $encoded = ob_get_clean();
+            abort_unless(is_string($encoded) && $encoded !== '', 500, 'Card artwork could not be encoded as WebP.');
             $result = $encoded;
 
             if (strlen($result) <= self::MAX_GENERATED_JPEG_BYTES) {
