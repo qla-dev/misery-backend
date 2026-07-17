@@ -102,6 +102,8 @@ Route::get('/simulator/rooms/{game}', fn (Game $game) => new GameResource($game-
     'moves' => fn ($query) => $query->with(['player', 'card'])->latest(),
     'messages' => fn ($query) => $query->with('user')->latest()->limit(100),
 ])))->middleware('cms.auth')->name('simulator.rooms.show');
+// Kept for compatibility with existing admin clients. The simulator UI uses
+// the Basic-auth-protected API endpoint so its Kill action does not rely on CSRF.
 Route::delete('/simulator/rooms/{game}', function (Game $game, GameCleanupService $cleanup) {
     $cleanup->forceDelete($game);
 

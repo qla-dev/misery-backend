@@ -9,12 +9,20 @@ use App\Http\Controllers\Api\QuestionController;
 use App\Http\Controllers\Api\RevenueCatController;
 use App\Http\Controllers\Api\StackController;
 use App\Http\Controllers\Api\UserController;
+use App\Models\Game;
+use App\Services\GameCleanupService;
 use Illuminate\Support\Facades\Route;
 
 Route::get('health', fn () => response()->json([
     'status' => 'ok',
     'timestamp' => now()->toIso8601String(),
 ])->header('Cache-Control', 'no-store'));
+
+Route::delete('admin/simulator/rooms/{game}', function (Game $game, GameCleanupService $cleanup) {
+    $cleanup->forceDelete($game);
+
+    return response()->noContent();
+})->middleware('cms.auth')->name('admin.simulator.rooms.destroy');
 
 Route::prefix('auth')->group(function () {
     Route::post('google', [AuthController::class, 'google']);

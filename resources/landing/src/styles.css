@@ -151,3 +151,9 @@
   .legal-page>section{padding-top:36px}
   .legal-page nav .ghost-button{background:transparent;border:0;padding:10px 0 10px 10px}
 }
+
+/* Keep adjacent landing-page sections visually distinct. */
+.playground{background:#101010}
+.rulebook-section{background:#080808}
+.cards-section{background:#101010}
+.shop{background:#080808}
