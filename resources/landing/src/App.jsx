@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import lottie from 'lottie-web/build/player/lottie_light';
 import mascotAnimation from '../../../../frontend/assets/animations/mascot_lottie.json';
-import rulebookSpectrumIllustration from '../../../../frontend/assets/images/rulebook-misery-spectrum.jpg';
+import rulebookSpectrumIllustration from '../../../../frontend/assets/images/rulebook-misery-spectrum-transparent.png';
 import rulebookTimerIllustration from '../../../../frontend/assets/images/rulebook-60-second-timer-transparent.png';
 import rulebookTrophyIllustration from '../../../../frontend/assets/images/rulebook-victory-trophy.png';
 import carnivalMaskIcon from '../../../../frontend/assets/icons/carnival-mask-silhouette.svg';
@@ -199,7 +199,7 @@ function WebRulebook({ cards, lang }) {
       <article className="rulebook-block rulebook-wide">
         <RuleBand number="2">{bs?'ŠTA JE U IGRI?':"WHAT'S IN THE GAME?"}</RuleBand>
         <p><b>100+ {bs?'KARTICA NESRETNIH DOGAĐAJA':'MISERABLE EVENT CARDS'}</b>{bs?'; svaka prikazuje događaj koji se dogodio ili bi se vrlo lako mogao dogoditi.':'; each one shows something that happened or very easily could happen.'}</p>
-        <div className="rulebook-callout"><div className="rulebook-generated-art rulebook-float"><img alt="" src={rulebookSpectrumIllustration}/></div><p>{bs?'Kao što ćeš vidjeti, neki događaji su prilično sitni ':"As you'll see, some events are pretty minor "}<em>{bs?'(poput propuštenog autobusa)':'(like missing the bus)'}</em>{bs?', dok su drugi mnogo gori ':', while others are far more miserable '}<em>{bs?'(poput udara munje)':'(like being struck by lightning)'}</em>{bs?'. Svaka kartica ima svoje mjesto na ':'. Every card has a fixed place on the '}<b>{bs?'Stopa patnje':'Misery Rate'}</b>{bs?' skali.':'.'}</p></div>
+        <div className="rulebook-callout rulebook-spectrum-callout"><div className="rulebook-generated-art rulebook-float"><img alt="" src={rulebookSpectrumIllustration}/></div><p>{bs?'Kao što ćeš vidjeti, neki događaji su prilično sitni ':"As you'll see, some events are pretty minor "}<em>{bs?'(poput propuštenog autobusa)':'(like missing the bus)'}</em>{bs?', dok su drugi mnogo gori ':', while others are far more miserable '}<em>{bs?'(poput udara munje)':'(like being struck by lightning)'}</em>{bs?'. Svaka kartica ima svoje mjesto na ':'. Every card has a fixed place on the '}<b>{bs?'Stopa patnje':'Misery Rate'}</b>{bs?' skali.':'.'}</p></div>
       </article>
 
       <article className="rulebook-block rulebook-wide">
