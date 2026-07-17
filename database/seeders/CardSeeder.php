@@ -15,7 +15,7 @@ class CardSeeder extends Seeder
     {
         $normal = Stack::updateOrCreate(['slug' => 'normal'], ['name' => 'Normal', 'color' => '#facc15', 'icon_key' => 'sparkles', 'description' => 'Funny and awkward situations', 'description_bs' => 'Smiješne i čudne situacije']);
         $spicy = Stack::updateOrCreate(['slug' => 'spicy'], ['name' => 'Spicy', 'color' => '#fb7185', 'icon_key' => 'flame', 'description' => 'Friendly, absurd and wildly unfortunate', 'description_bs' => 'Prijateljski, apsurdno i divlje']);
-        $adult = Stack::updateOrCreate(['slug' => '18-plus'], ['name' => '18+', 'color' => '#ef4444', 'icon_key' => 'shield-alert', 'description' => 'Explicit sexual situations for adults only', 'description_bs' => 'Eksplicitne seksualne situacije samo za odrasle']);
+        $adult = Stack::updateOrCreate(['slug' => '18-plus'], ['name' => '18+', 'color' => '#ef4444', 'icon_key' => 'shield-alert', 'description' => 'Suggestive adult situations without graphic content', 'description_bs' => 'Sugestivne situacije za odrasle bez eksplicitnog sadržaja']);
 
         $events = [
             // Travel disasters
@@ -167,34 +167,6 @@ class CardSeeder extends Seeder
             ['A Circus Clown Gets Trapped in Your Chimney', 'The noises are terrifying until a red shoe drops into the fireplace.'],
         ], 'spicy');
 
-        $adultEvents = $this->expandPremiumEvents([
-            ['Your Parents Walk In During Sex', 'The door opens before either of you can reach the sheets.'],
-            ['Send a Nude to the Family Group Chat', 'Read receipts appear before you can find the delete button.'],
-            ['The Condom Breaks During a One-Night Stand', 'The mood disappears instantly and neither of you knows what comes next.'],
-            ['Say Your Ex’s Name During Sex', 'The room goes silent while both of you process exactly what you said.'],
-            ['Your Intimate Video Plays on the Office Screen', 'The presentation connects to the wrong file while the entire team watches.'],
-            ['A Sex Toy Falls Out of Your Bag at Security', 'The scanner operator raises it while the entire queue watches.'],
-            ['Your Partner Finds Your Secret Dating Profile', 'The active status makes every explanation sound worse.'],
-            ['Your Nude Selfie Syncs to the Family Television', 'The slideshow changes before anyone can find the remote.'],
-            ['The Hotel Cleaner Walks In Mid-Position', 'The do-not-disturb sign is still hanging safely inside the room.'],
-            ['You Moan the Wrong Name Loud Enough for the Neighbors', 'The wall goes quiet and your partner asks one very specific question.'],
-            ['Your Handcuff Key Breaks in the Lock', 'The playful experiment becomes an awkward call for professional help.'],
-            ['Your Boss Receives Your Sext Instead of Your Partner', 'The typing indicator appears and then disappears for a very long time.'],
-            ['Your Bedroom Livestream Accidentally Goes Public', 'The viewer count climbs before you notice the red icon.'],
-            ['A Condom Falls Out During a Family Dinner', 'It lands in the middle of the table between the bread and your grandmother.'],
-            ['Your Partner’s Parent Finds You Naked in the Kitchen', 'You were looking for water and find the entire family instead.'],
-            ['Your Dirty Talk Activates the Smart Speaker', 'The recording is saved and sent to the shared household account.'],
-            ['A Neighbor Returns Your Vibrating Package', 'They explain exactly how long it has been making noise.'],
-            ['You Get Stuck in a Compromising Position', 'The cramp arrives first and the emergency call becomes unavoidable.'],
-            ['Your Ex Sends Intimate Screenshots to Your New Partner', 'Years of private messages arrive without context or warning.'],
-            ['The Bed Collapses Through the Apartment Floor', 'The neighbors downstairs discover far more than the structural damage.'],
-            ['Your Waxing Appointment Removes Much More Than Planned', 'The mirror confirms that the requested shape is no longer possible.'],
-            ['Your Date Discovers the Matching Tattoo With Your Ex', 'The lights are already off when they recognize the initials.'],
-            ['Your Partner’s Name Is Tattooed in the Wrong Place', 'The artist reveals the spelling mistake after the final wipe.'],
-            ['A Private Voice Note Plays Through the Bar Speakers', 'Your detailed plans replace the music for everyone in the room.'],
-            ['The Fire Alarm Starts While You Are Both Naked', 'The entire hotel waits outside while you share one tiny towel.'],
-        ], 'adult');
-
         // Explicitly ranked after comparing the consequence described on every card.
         // The order moves from embarrassment/inconvenience through lasting loss and
         // financial damage to situations with immediate risk to life.
@@ -333,7 +305,7 @@ class CardSeeder extends Seeder
             return;
         }
 
-        DB::transaction(function () use ($adult, $adultEvents, $events, $normal, $spicy, $spicyEvents) {
+        DB::transaction(function () use ($events, $normal, $spicy, $spicyEvents) {
             $seedPack = static function (Stack $stack, string $deck, array $packEvents): void {
                 foreach ($packEvents as $event) {
                     Card::query()->updateOrCreate(
@@ -348,10 +320,9 @@ class CardSeeder extends Seeder
                 }
             };
 
-            // Artwork, translations, games and runtime rows are user data. A content
-            // seed may update the seeded copy and score, but must never delete them.
+            // Artwork, translations, games and runtime rows are user data. Update
+            // seeded copy and scores without deleting rows from these two packs.
             $seedPack($normal, 'normal', $events);
-            $seedPack($adult, '18-plus', $adultEvents);
             $seedPack($spicy, 'spicy', $spicyEvents);
 
             // These instructions/demo artworks are also bundled with the app. Keep
@@ -373,6 +344,8 @@ class CardSeeder extends Seeder
                     ->update(['image' => $path]);
             }
         });
+
+        $this->call(AdultCardSeeder::class);
     }
 
     private function expandPremiumEvents(array $events, string $tone): array
