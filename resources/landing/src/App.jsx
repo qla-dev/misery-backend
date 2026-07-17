@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import lottie from 'lottie-web/build/player/lottie_light';
 import mascotAnimation from '../../../../frontend/assets/animations/mascot_lottie.json';
 import rulebookSpectrumIllustration from '../../../../frontend/assets/images/rulebook-misery-spectrum.jpg';
+import rulebookTimerIllustration from '../../../../frontend/assets/images/rulebook-60-second-timer-transparent.png';
+import rulebookTrophyIllustration from '../../../../frontend/assets/images/rulebook-victory-trophy.png';
+import carnivalMaskIcon from '../../../../frontend/assets/icons/carnival-mask-silhouette.svg';
 import {
-  Apple, ArrowDown, ArrowLeft, Check, ChevronDown, Crown, Flame,
-  Gamepad2, Globe2, Menu, Play, RotateCcw,
+  Apple, ArrowDown, ArrowLeft, BellRing, Check, ChevronDown, Crown, Flame,
+  Gamepad2, Globe2, Menu, Pause, Play, RotateCcw,
   Sparkles, X, Zap,
 } from 'lucide-react';
 
@@ -190,13 +193,13 @@ function WebRulebook({ cards, lang }) {
     <div className="rulebook-paper">
       <article className="rulebook-block rulebook-wide">
         <RuleBand number="1">{bs?'ŠTA POKUŠAVAM POSTIĆI?':'WHAT AM I TRYING TO ACCOMPLISH?'}</RuleBand>
-        <p>{bs?'Budi najbolji u rangiranju nesretnih životnih događaja, od ':'Be the best at ranking miserable real-life events from '}<em>{bs?'jedva loših':'barely bad'}</em>{bs?' do ':' to '}<em>{bs?'potpune bijede':'absolute misery'}</em>{bs?', i izgradi svoj Misery Lane prije svih ostalih.':', and build your Misery Lane before everyone else.'}</p>
+        <p>{bs?'Budi najbolji u rangiranju nesretnih životnih događaja, od ':'Be the best at ranking miserable real-life events from '}<em>{bs?'jedva loših':'barely bad'}</em>{bs?' do ':' to '}<em>{bs?'potpune bijede':'absolute misery'}</em>{bs?', i izgradi svoju Stazu patnje prije svih ostalih.':', and build your Misery Lane before everyone else.'}</p>
       </article>
 
       <article className="rulebook-block rulebook-wide">
         <RuleBand number="2">{bs?'ŠTA JE U IGRI?':"WHAT'S IN THE GAME?"}</RuleBand>
         <p><b>100+ {bs?'KARTICA NESRETNIH DOGAĐAJA':'MISERABLE EVENT CARDS'}</b>{bs?'; svaka prikazuje događaj koji se dogodio ili bi se vrlo lako mogao dogoditi.':'; each one shows something that happened or very easily could happen.'}</p>
-        <div className="rulebook-callout"><div className="rulebook-generated-art"><img alt="" src={rulebookSpectrumIllustration}/></div><p>{bs?'Kao što ćeš vidjeti, neki događaji su prilično sitni ':"As you'll see, some events are pretty minor "}<em>{bs?'(poput propuštenog autobusa)':'(like missing the bus)'}</em>{bs?', dok su drugi mnogo gori ':', while others are far more miserable '}<em>{bs?'(poput udara munje)':'(like being struck by lightning)'}</em>{bs?'. Svaka kartica ima svoje mjesto na ':'. Every card has a fixed place on the '}<b>{bs?'Stopa patnje':'Misery Rate'}</b>{bs?' skali.':'.'}</p></div>
+        <div className="rulebook-callout"><div className="rulebook-generated-art rulebook-float"><img alt="" src={rulebookSpectrumIllustration}/></div><p>{bs?'Kao što ćeš vidjeti, neki događaji su prilično sitni ':"As you'll see, some events are pretty minor "}<em>{bs?'(poput propuštenog autobusa)':'(like missing the bus)'}</em>{bs?', dok su drugi mnogo gori ':', while others are far more miserable '}<em>{bs?'(poput udara munje)':'(like being struck by lightning)'}</em>{bs?'. Svaka kartica ima svoje mjesto na ':'. Every card has a fixed place on the '}<b>{bs?'Stopa patnje':'Misery Rate'}</b>{bs?' skali.':'.'}</p></div>
       </article>
 
       <article className="rulebook-block rulebook-wide">
@@ -209,35 +212,40 @@ function WebRulebook({ cards, lang }) {
       <article className="rulebook-block rulebook-anatomy">
         <RuleBand number="4">{bs?'ANATOMIJA KARTICE':'CARD ANATOMY'}</RuleBand>
         <p>{bs?'Kartice u Misery Meteru nisu komplikovane.':'Misery Meter cards aren’t complicated.'}</p>
-        <div className="anatomy-demo"><div className="anatomy-labels"><b>{bs?'NESRETNI DOGAĐAJ':'MISERABLE EVENT'}</b><b>{bs?'ILUSTRACIJA':'ILLUSTRATION'}</b><b>{bs?'STOPA PATNJE':'MISERY RATE'}</b></div><GameCard card={{...cards[2],title:bs&&cards[2].titleBs?cards[2].titleBs:cards[2].title,sub:bs&&cards[2].subBs?cards[2].subBs:cards[2].sub}} className="rulebook-anatomy-card" scoreLabel={bs?'STOPA PATNJE':'MISERY RATE'}/></div>
+        <div className="anatomy-demo"><div className="anatomy-labels"><b>{bs?'NESRETNI DOGAĐAJ':'MISERABLE EVENT'}</b><b>{bs?'ILUSTRACIJA':'ILLUSTRATION'}</b><b>{bs?'STOPA PATNJE':'MISERY RATE'}</b></div><GameCard card={{...cards[2],title:bs&&cards[2].titleBs?cards[2].titleBs:cards[2].title,sub:bs&&cards[2].subBs?cards[2].subBs:cards[2].sub}} className="rulebook-anatomy-card rulebook-float" scoreLabel={bs?'STOPA PATNJE':'MISERY RATE'}/></div>
       </article>
 
       <article className="rulebook-block">
         <RuleBand number="5">{bs?'NEKA BIJEDA POČNE':"LET'S GET MISERABLE"}</RuleBand>
-        <p>{bs?'Svaki igrač počinje s tri kartice koje su već poredane od najniže do najviše ocjene Stope patnje. One čine početak tvog Misery Lanea.':'Each player starts with three cards already arranged from the lowest to the highest Misery Rate. Those cards form the beginning of your Misery Lane.'}</p>
-        <div className="rulebook-lane"><strong>MISERY LANE</strong><RuleLane cards={cards} hidden lang={lang}/><p>{bs?'Nova kartica prvo ulazi u stazu sa znakom ?. Izaberi mjesto između poznatih ocjena gdje misliš da pripada. Ne pogađaš broj, nego njen pravilan položaj.':'The new card first enters the lane with a ?. Choose the place between the known scores where you think it belongs. You are not guessing the number, only its correct position.'}</p><RuleLane cards={cards} lang={lang}/><p>{bs?'Game Master zatim otkriva stvarnu ocjenu Stope patnje i pokazuje da li je položaj tačan.':'The Game Master then reveals the real Misery Rate and shows whether the position is correct.'}</p></div>
+        <p>{bs?'Svaki igrač počinje s tri kartice koje su već poredane od najniže do najviše ocjene Stope patnje. One čine početak tvoje Staze patnje.':'Each player starts with three cards already arranged from the lowest to the highest Misery Rate. Those cards form the beginning of your Misery Lane.'}</p>
+        <div className="rulebook-lane"><strong>{bs?'STAZA PATNJE':'MISERY LANE'}</strong><RuleLane cards={cards} hidden lang={lang}/><p>{bs?'Nova kartica prvo ulazi u stazu sa znakom ?.??. Izaberi mjesto između poznatih ocjena gdje misliš da pripada. Ne pogađaš broj, nego njen pravilan položaj.':'The new card first enters the lane with a ?.??. Choose the place between the known scores where you think it belongs. You are not guessing the number, only its correct position.'}</p><RuleLane cards={cards} lang={lang}/><p>{bs?'Game Master zatim otkriva stvarnu ocjenu Stope patnje i pokazuje da li je položaj tačan.':'The Game Master then reveals the real Misery Rate and shows whether the position is correct.'}</p></div>
+      </article>
+
+      <article className="rulebook-block rulebook-wide">
+        <RuleBand number="6">{bs?'VRIJEME ZA ODGOVOR':'TIME TO ANSWER'}</RuleBand>
+        <div className="rulebook-callout rulebook-timer-callout"><p>{bs?'Svaki igrač ima ':'Each player has '}<b>{bs?'jednu minutu':'one minute'}</b>{bs?' da odgovori ili završi potrebnu radnju na svom potezu, ':' to answer or complete the required action on every turn, '}<em>{bs?'uključujući pokušaj krađe':'including a steal attempt'}</em>{bs?'. Odbrojavanje počinje čim tvoj potez postane aktivan.':'. The countdown begins as soon as your turn becomes active.'}</p><div className="rulebook-timer-art rulebook-float"><img alt={bs?'Vremensko ograničenje od 60 sekundi':'60-second time limit'} src={rulebookTimerIllustration}/></div></div>
+        <div className="rulebook-timeout"><i><BellRing/></i><div><b>{bs?'UPOZORENJA · 15 / 30 / 45 SEKUNDI':'WARNINGS · 15 / 30 / 45 SECONDS'}</b><p>{bs?'Ako igrač ne reaguje u roku od 60 sekundi, izbacuje se. Igra se nastavlja kada ode obični igrač; ako host napusti igru ili postane neaktivan, cijela igra se završava.':'If the player does not act within 60 seconds, they are removed. The game continues when a regular player leaves; if the host leaves or becomes inactive, the entire game ends.'}</p></div></div>
       </article>
 
       <article className="rulebook-block">
-        <RuleBand number="6">GAME MASTER</RuleBand>
-        <p>{bs?'Aplikacija je vaš Game Master. Vodi redoslijed poteza, prikazuje čiji je potez, zaključava nedostupne akcije, otkriva ocjene i kroz posebne overlay poruke objašnjava svaki rezultat, krađu i pobjedu.':'The app is your Game Master. It manages turn order, shows whose turn it is, locks unavailable actions, reveals scores, and uses dedicated overlays to explain every result, steal, and victory.'}</p>
-        <div className="rulebook-timeout"><b>{bs?'NEAKTIVNOST · 60 SEKUNDI':'INACTIVITY · 60 SECONDS'}</b><p>{bs?'Aktivni igrač dobija upozorenja nakon 15, 30 i 45 sekundi. Ako ne reaguje u roku od 60 sekundi, izbacuje se. Igra se nastavlja ako je otišao obični igrač; ako host napusti igru ili postane neaktivan, cijela igra se završava.':'The active player is warned after 15, 30, and 45 seconds. If they do not act within 60 seconds, they are removed. The game continues when a regular player leaves; if the host leaves or becomes inactive, the entire game ends.'}</p></div>
+        <RuleBand number="7">GAME MASTER</RuleBand>
+        <p>{bs?'Aplikacija je vaš Game Master. Vodi redoslijed poteza, prikazuje čiji je potez, zaključava nedostupne akcije, otkriva ocjene i kroz posebne flash poruke objašnjava svaki rezultat, krađu i pobjedu.':'The app is your Game Master. It manages turn order, shows whose turn it is, locks unavailable actions, reveals scores, and uses dedicated flash messages to explain every result, steal, and victory.'}</p>
       </article>
 
       <article className="rulebook-block">
-        <RuleBand number="7">{bs?'TAČNO ILI POGREŠNO':'RIGHT OR WRONG'}</RuleBand>
-        <p>{bs?'Nakon otkrivanja ocjene, Game Master prikazuje rezultat poteza preko cijelog ekrana:':'After revealing the score, the Game Master displays the result in a full overlay:'}</p>
-        <div className="rulebook-outcomes"><div className="correct"><i/><section><b>{bs?'TAČNO':'RIGHT'}</b><p>{bs?'Zeleni overlay znači da je položaj tačan. Kartica ostaje u tvojoj stazi.':'A green overlay means the position is correct. The card stays in your lane.'}</p></section></div><div className="wrong"><i/><section><b>{bs?'POGREŠNO':'WRONG'}</b><p>{bs?'Crveni overlay znači da je procjena bila previsoka ili preniska. Kartica ne ulazi u tvoju stazu.':'A red overlay means your guess was too high or too low. The card does not enter your lane.'}</p></section></div></div>
+        <RuleBand number="8">{bs?'FLASH PORUKE':'FLASH MESSAGES'}</RuleBand>
+        <p>{bs?'Game Master koristi flash poruke preko cijelog ekrana da jasno pokaže trenutno stanje igre:':'The Game Master uses full-screen flash messages to clearly show the current game state:'}</p>
+        <div className="rulebook-outcomes"><div className="correct"><i><Check/></i><section><b>{bs?'TAČNO':'RIGHT'}</b><p>{bs?'Zelena flash poruka znači da je položaj tačan. Kartica ostaje u tvojoj stazi.':'A green flash message means the position is correct. The card stays in your lane.'}</p></section></div><div className="wrong"><i><X/></i><section><b>{bs?'POGREŠNO':'WRONG'}</b><p>{bs?'Crvena flash poruka znači da je procjena bila previsoka ili preniska. Kartica ne ulazi u tvoju stazu.':'A red flash message means your guess was too high or too low. The card does not enter your lane.'}</p></section></div><div className="hold"><i><Pause/></i><section><b>{bs?'NA ČEKANJU':'ON HOLD'}</b><p>{bs?'Žuta flash poruka znači da je igra privremeno na čekanju dok drugi igrač završi svoju odluku.':'A yellow flash message means the game is on hold while another player completes their decision.'}</p></section></div><div className="my-turn"><i><Play fill="currentColor"/></i><section><b>{bs?'TVOJ POTEZ':'YOUR TURN'}</b><p>{bs?'Bijela flash poruka znači da je tvoj potez i da sada biraš dostupnu akciju.':'A white flash message means it is your turn and you can choose an available action.'}</p></section></div></div>
       </article>
 
       <article className="rulebook-block rulebook-steal">
-        <RuleBand number="8">{bs?'KRAĐA':'STEALING'}</RuleBand>
-        <div className="rulebook-outcomes"><div className="steal"><i/><section><b>{bs?'PRILIKA ZA KRAĐU':'STEAL CHANCE'}</b><p>{bs?'Nakon pogrešnog poteza, ostali igrači redom dobijaju posebni overlay sa izborom da prihvate ili preskoče krađu. Ko prihvati, pokušava pravilno postaviti istu karticu u svoju stazu. Uspješna krađa dodaje karticu kradljivcu; ako svi preskoče ili pogriješe, kartica se odbacuje.':'After a wrong move, the other players receive a dedicated overlay in order and may accept or pass the steal. Whoever accepts tries to place the same card correctly in their own lane. A successful steal adds it to the stealer’s lane; if everyone passes or misses, the card is discarded.'}</p></section></div></div>
+        <RuleBand number="9">{bs?'KRAĐA':'STEALING'}</RuleBand>
+        <div className="rulebook-outcomes"><div className="steal"><i><img alt="" src={carnivalMaskIcon}/></i><section><b>{bs?'PRILIKA ZA KRAĐU':'STEAL CHANCE'}</b><p>{bs?'Nakon pogrešnog poteza, ostali igrači redom dobijaju posebnu flash poruku sa izborom da prihvate ili preskoče krađu. Ko prihvati, pokušava pravilno postaviti istu karticu u svoju stazu. Uspješna krađa dodaje karticu kradljivcu; ako svi preskoče ili pogriješe, kartica se odbacuje.':'After a wrong move, the other players receive a dedicated flash message in order and may accept or pass the steal. Whoever accepts tries to place the same card correctly in their own lane. A successful steal adds it to the stealer’s lane; if everyone passes or misses, the card is discarded.'}</p></section></div></div>
       </article>
 
       <article className="rulebook-block rulebook-win">
-        <RuleBand number="9">{bs?'KAKO POBIJEDITI':'HOW TO WIN'}</RuleBand>
-        <div><b>{bs?'PRVI IGRAČ KOJI DODA CILJANI BROJ KARTICA U SVOJU STAZU POBJEĐUJE.':'THE FIRST PLAYER TO ADD THE TARGET NUMBER OF CARDS TO THEIR LANE WINS.'}</b><p>{bs?'Ciljani broj kartica bira se prije početka igre.':'The target number of cards is selected before the game starts.'}</p></div>
+        <RuleBand number="10">{bs?'KAKO POBIJEDITI':'HOW TO WIN'}</RuleBand>
+        <div className="rulebook-win-layout"><div className="rulebook-win-copy"><b>{bs?'CILJANI BROJ KARTICA BIRA SE PRIJE POČETKA IGRE.':'THE TARGET NUMBER OF CARDS IS SELECTED BEFORE THE GAME STARTS.'}</b><p>{bs?'Prvi igrač koji doda ciljani broj kartica u svoju stazu pobjeđuje.':'The first player to add the target number of cards to their lane wins.'}</p></div><div className="rulebook-win-art"><img className="rulebook-win-trophy rulebook-float" alt={bs?'Pobjednički pehar':'Victory trophy'} src={rulebookTrophyIllustration}/></div></div>
       </article>
     </div>
   </section>;
