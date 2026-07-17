@@ -25,7 +25,9 @@ class ScreenshotMakerTest extends TestCase
             ->assertSee('FRAME 10')
             ->assertSee('Generate artwork for frame 1')
             ->assertSee('Generate artwork for frame 10')
-            ->assertSee('YELLOW RAINBOW')
+            ->assertSee('Sharp yellow ribbons')
+            ->assertSee('Yellow sunrise gradient')
+            ->assertSee('data-draggable-text="headline"', false)
             ->assertSee('Text position')
             ->assertSee('Phone angle')
             ->assertSee('Amatic SC')
@@ -69,6 +71,7 @@ class ScreenshotMakerTest extends TestCase
             'text_position' => 'top',
             'phone_angle' => 'tilted-right',
             'background' => 'Black depth with bright yellow arcs.',
+            'static_background' => 'yellow-ribbons',
             'people_count' => 2,
             'people_description' => 'Two diverse friends laughing together.',
             'app_screen' => UploadedFile::fake()->image('misery-screen.png', 390, 844),
@@ -88,7 +91,8 @@ class ScreenshotMakerTest extends TestCase
                 && $request['model'] === 'google/gemini-image-test'
                 && $request['resolution'] === '2K'
                 && $request['aspect_ratio'] === '9:16'
-                && str_contains($request['prompt'], 'Misery-yellow (#FACC15) rainbow')
+                && str_contains($request['prompt'], 'perfectly flat solid #FF00FF magenta background')
+                && str_contains($request['prompt'], 'Create only the foreground overlay')
                 && str_contains($request['prompt'], 'ABSOLUTELY NO MARKETING TEXT')
                 && ! str_contains($request['prompt'], 'RANK THE WORST')
                 && collect($request['input_references'])->contains(fn ($reference) => str_starts_with($reference['image_url']['url'], 'data:image/jpeg;base64,'))
@@ -117,6 +121,11 @@ class ScreenshotMakerTest extends TestCase
             'headline_color' => 'black',
             'supporting_font' => 'outfit',
             'supporting_color' => 'yellow',
+            'static_background' => 'sunrise',
+            'headline_x' => 48.5,
+            'headline_y' => 12.25,
+            'supporting_x' => 51.5,
+            'supporting_y' => 24.75,
         ])->assertOk();
 
         $savedFiles = collect(Storage::disk('public')->files('screenshots/saved'));

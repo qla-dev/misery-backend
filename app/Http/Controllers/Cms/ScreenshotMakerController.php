@@ -72,6 +72,7 @@ class ScreenshotMakerController extends Controller
             'text_position' => ['required', Rule::in(['top', 'bottom'])],
             'phone_angle' => ['required', Rule::in(['front', 'left', 'right', 'tilted-left', 'tilted-right', 'close-up'])],
             'background' => ['required', 'string', 'max:300'],
+            'static_background' => ['required', Rule::in(['yellow-ribbons', 'sunrise', 'gold-depth', 'dark-radial'])],
             'people_count' => ['required', 'integer', 'between:0,4'],
             'people_description' => ['nullable', 'string', 'max:500'],
             'app_screen' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:12288'],
@@ -94,33 +95,30 @@ class ScreenshotMakerController extends Controller
         $people = (int) $data['people_count'] === 0
             ? 'No people. Make the phone and app UI the sole hero.'
             : 'Include exactly '.$data['people_count'].' people: '.trim((string) $data['people_description']).'. They support the phone and never cover the app UI or the reserved copy area.';
-        $reservedCopyArea = $data['text_position'] === 'top'
-            ? 'Reserve the top 27% as a clean, low-detail copy-safe area. Keep the phone, faces, hands, and important rainbow details below it.'
-            : 'Reserve the bottom 24% as a clean, low-detail copy-safe area. Keep the phone, faces, hands, and important rainbow details above it.';
         $prompt = implode("\n", [
-            'Create the artwork layer for a premium Apple App Store portrait screenshot for the Misery Meter party game.',
-            'Output is one complete 1290 x 2796 composition, safe for an iPhone App Store screenshot. The CMS adds editable marketing typography later.',
-            $reservedCopyArea,
+            'Create only the foreground overlay for a premium Apple App Store portrait screenshot for the Misery Meter party game.',
+            'Output is one complete 1290 x 2796 portrait composition. The CMS adds the static background and editable typography later.',
             'ABSOLUTELY NO MARKETING TEXT: do not draw any headline, subtitle, caption, slogan, placeholder letters, mockup labels, or decorative typography anywhere outside the supplied app screen.',
             'Phone presentation angle: '.$data['phone_angle'].'. Show a realistic premium black iPhone frame with the supplied app screen fitted naturally inside it.',
-            'Background direction: '.$data['background'].'.',
             $people,
-            'MANDATORY BRAND BACKGROUND: every screenshot has a bold Misery-yellow (#FACC15) rainbow made from broad concentric arcs/rays behind the phone. Use yellow, warm gold, black, and white as the dominant palette. The yellow rainbow must be unmistakable in every result.',
+            'TRANSPARENCY KEY: place the phone and people over a perfectly flat solid #FF00FF magenta background. The magenta must be completely uniform with no gradients, shadows, texture, floor, reflections, scenery, rainbow, or objects. Never use magenta on the foreground subjects.',
+            'Keep the complete phone and every person fully inside the canvas with clean separated edges and generous space around them.',
             'Use the supplied App Store examples only for hierarchy, commercial polish, phone perspective, spacing, and the relationship between headline, device, and people. Never copy their brands, wording, colors, faces, logos, or app screens.',
             'High-end campaign art, generous safe margins, no watermark, no extra logos. Text already visible inside the supplied app UI may remain; generate no other text.',
         ]);
 
         try {
             $result = $generator->generate($prompt, $references, '9:16');
-            $jpeg = $this->appleScreenshotJpeg($result['data']);
-            $filename = 'frame-'.str_pad((string) $data['frame'], 2, '0', STR_PAD_LEFT).'-'.Str::uuid().'.jpg';
-            Storage::disk('public')->put('screenshots/generated/'.$filename, $jpeg);
+            $png = $this->appleScreenshotOverlayPng($result['data']);
+            $filename = 'frame-'.str_pad((string) $data['frame'], 2, '0', STR_PAD_LEFT).'-'.Str::uuid().'.png';
+            Storage::disk('public')->put('screenshots/generated/'.$filename, $png);
             $draft = [
                 'frame' => (int) $data['frame'],
                 'artwork' => $filename,
                 'headline' => $data['headline'],
                 'supporting_text' => trim((string) $data['supporting_text']),
                 'text_position' => $data['text_position'],
+                'static_background' => $data['static_background'],
                 'headline_font' => $data['headline_font'] ?? 'bebas',
                 'headline_color' => $data['headline_color'] ?? 'black',
                 'supporting_font' => $data['supporting_font'] ?? 'outfit',
@@ -160,6 +158,11 @@ class ScreenshotMakerController extends Controller
             'headline_color' => ['required', Rule::in(['white', 'yellow', 'black'])],
             'supporting_font' => ['required', Rule::in(['bebas', 'outfit', 'amatic'])],
             'supporting_color' => ['required', Rule::in(['white', 'yellow', 'black'])],
+            'static_background' => ['required', Rule::in(['yellow-ribbons', 'sunrise', 'gold-depth', 'dark-radial'])],
+            'headline_x' => ['required', 'numeric', 'between:0,100'],
+            'headline_y' => ['required', 'numeric', 'between:0,100'],
+            'supporting_x' => ['required', 'numeric', 'between:0,100'],
+            'supporting_y' => ['required', 'numeric', 'between:0,100'],
         ]);
 
         abort_unless(
@@ -212,7 +215,7 @@ class ScreenshotMakerController extends Controller
             })->values()->all();
     }
 
-    private function appleScreenshotJpeg(string $image): string
+    private function appleScreenshotOverlayPng(string $image): string
     {
         throw_unless(function_exists('imagecreatefromstring'), \RuntimeException::class, 'GD is required to prepare Apple screenshots.');
         $source = @imagecreatefromstring($image);
@@ -235,15 +238,27 @@ class ScreenshotMakerController extends Controller
         }
 
         $canvas = imagecreatetruecolor(1290, 2796);
+        imagealphablending($canvas, false);
+        imagesavealpha($canvas, true);
         imagecopyresampled($canvas, $source, 0, 0, $cropX, $cropY, 1290, 2796, $cropWidth, $cropHeight);
+        for ($y = 0; $y < 2796; $y++) {
+            for ($x = 0; $x < 1290; $x++) {
+                $color = imagecolorat($canvas, $x, $y);
+                $red = ($color >> 16) & 0xff;
+                $green = ($color >> 8) & 0xff;
+                $blue = $color & 0xff;
+                if ($red > 180 && $blue > 180 && $green < 120 && ($red + $blue - 2 * $green) > 240) {
+                    imagesetpixel($canvas, $x, $y, imagecolorallocatealpha($canvas, $red, $green, $blue, 127));
+                }
+            }
+        }
         ob_start();
-        imageinterlace($canvas, true);
-        imagejpeg($canvas, null, 92);
-        $jpeg = ob_get_clean();
+        imagepng($canvas, null, 8);
+        $png = ob_get_clean();
         imagedestroy($source);
         imagedestroy($canvas);
-        throw_unless(is_string($jpeg) && $jpeg !== '', \RuntimeException::class, 'Apple screenshot encoding failed.');
+        throw_unless(is_string($png) && $png !== '', \RuntimeException::class, 'Apple screenshot overlay encoding failed.');
 
-        return $jpeg;
+        return $png;
     }
 }
