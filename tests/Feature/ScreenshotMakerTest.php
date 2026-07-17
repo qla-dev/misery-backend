@@ -93,7 +93,8 @@ class ScreenshotMakerTest extends TestCase
                 && $request['aspect_ratio'] === '9:16'
                 && str_contains($request['prompt'], 'perfectly flat solid #FF00FF magenta background')
                 && str_contains($request['prompt'], 'Create only the foreground overlay')
-                && str_contains($request['prompt'], 'ABSOLUTELY NO MARKETING TEXT')
+                && str_contains($request['prompt'], 'ABSOLUTELY NO TEXT')
+                && str_contains($request['prompt'], 'solid #00FF00 green chroma screen')
                 && ! str_contains($request['prompt'], 'RANK THE WORST')
                 && collect($request['input_references'])->contains(fn ($reference) => str_starts_with($reference['image_url']['url'], 'data:image/jpeg;base64,'))
                 && collect($request['input_references'])->contains(fn ($reference) => str_starts_with($reference['image_url']['url'], 'data:image/png;base64,'));
@@ -126,6 +127,8 @@ class ScreenshotMakerTest extends TestCase
             'headline_y' => 12.25,
             'supporting_x' => 51.5,
             'supporting_y' => 24.75,
+            'artwork_x' => 44.5,
+            'artwork_y' => 57.25,
         ])->assertOk();
 
         $savedFiles = collect(Storage::disk('public')->files('screenshots/saved'));

@@ -88,7 +88,7 @@ class ScreenshotMakerController extends Controller
             $references[] = [
                 'mime_type' => (string) $file->getMimeType(),
                 'data' => (string) file_get_contents($file->getRealPath()),
-                'label' => 'This is the exact Misery Meter app screen. Reproduce its visible UI faithfully inside the phone display. Do not rewrite its interface text or invent a different app.',
+                'label' => 'Use this only as a reference for the phone screen proportions. Do not reproduce its UI; the phone display must remain a flat green chroma screen.',
             ];
         }
 
@@ -98,8 +98,8 @@ class ScreenshotMakerController extends Controller
         $prompt = implode("\n", [
             'Create only the foreground overlay for a premium Apple App Store portrait screenshot for the Misery Meter party game.',
             'Output is one complete 1290 x 2796 portrait composition. The CMS adds the static background and editable typography later.',
-            'ABSOLUTELY NO MARKETING TEXT: do not draw any headline, subtitle, caption, slogan, placeholder letters, mockup labels, or decorative typography anywhere outside the supplied app screen.',
-            'Phone presentation angle: '.$data['phone_angle'].'. Show a realistic premium black iPhone frame with the supplied app screen fitted naturally inside it.',
+            'ABSOLUTELY NO TEXT: do not draw any headline, subtitle, caption, slogan, placeholder letters, mockup labels, interface text, or decorative typography.',
+            'Phone presentation angle: '.$data['phone_angle'].'. Show a realistic premium black iPhone frame. Its entire display area inside the bezel must always be a perfectly flat solid #00FF00 green chroma screen with no UI, icons, text, gradients, glare, reflections, shadows, notch content, or variation. Never use green elsewhere.',
             $people,
             'TRANSPARENCY KEY: place the phone and people over a perfectly flat solid #FF00FF magenta background. The magenta must be completely uniform with no gradients, shadows, texture, floor, reflections, scenery, rainbow, or objects. Never use magenta on the foreground subjects.',
             'Keep the complete phone and every person fully inside the canvas with clean separated edges and generous space around them.',
@@ -163,6 +163,8 @@ class ScreenshotMakerController extends Controller
             'headline_y' => ['required', 'numeric', 'between:0,100'],
             'supporting_x' => ['required', 'numeric', 'between:0,100'],
             'supporting_y' => ['required', 'numeric', 'between:0,100'],
+            'artwork_x' => ['required', 'numeric', 'between:0,100'],
+            'artwork_y' => ['required', 'numeric', 'between:0,100'],
         ]);
 
         abort_unless(
