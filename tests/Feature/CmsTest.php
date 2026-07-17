@@ -33,6 +33,7 @@ class CmsTest extends TestCase
             ->assertSee('Export')
             ->assertSee('Generate')
             ->assertSee('Enhance selected')
+            ->assertSee('Weight')
             ->assertSee('Bosnian translate selected')
             ->assertSee('selectVisibleCards', false)
             ->assertSee('tabTop=footerTop+115', false)
@@ -49,6 +50,27 @@ class CmsTest extends TestCase
         ])->assertRedirect();
 
         $this->assertDatabaseHas('cards', ['id' => $card->id, 'title' => 'Worse day', 'deck' => 'normal']);
+    }
+
+    public function test_cms_displays_and_sorts_artwork_weight(): void
+    {
+        Storage::fake('public');
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        Storage::disk('public')->put('cards/small.jpg', str_repeat('a', 50 * 1024));
+        Storage::disk('public')->put('cards/large.jpg', str_repeat('b', 120 * 1024));
+        Card::create(['title' => 'Small artwork', 'score' => 10, 'image' => 'cards/small.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        Card::create(['title' => 'Large artwork', 'score' => 20, 'image' => 'cards/large.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->get('/cms/cards?sort=artwork_weight&direction=desc')
+            ->assertOk()
+            ->assertSee('120 KB')
+            ->assertSee('50 KB')
+            ->assertSeeInOrder(['Large artwork', 'Small artwork']);
+
+        $this->withServerVariables($server)->get('/cms/cards?sort=artwork_weight&direction=asc')
+            ->assertOk()
+            ->assertSeeInOrder(['Small artwork', 'Large artwork']);
     }
 
     public function test_cms_filters_cards_by_artwork_enhancement_state(): void

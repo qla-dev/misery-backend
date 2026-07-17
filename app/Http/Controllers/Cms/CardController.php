@@ -10,6 +10,7 @@ use DOMDocument;
 use DOMElement;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -24,18 +25,55 @@ class CardController extends Controller
 
     public function index(Request $request)
     {
-        $cards = Card::with('stack')->when($request->string('q')->toString(), function ($query, $search) {
+        $cardQuery = Card::with('stack')->when($request->string('q')->toString(), function ($query, $search) {
             $query->where(fn ($q) => $q->where('title', 'like', "%{$search}%")->orWhere('subtitle', 'like', "%{$search}%"));
         })->when($request->filled('status'), fn ($query) => $query->where('status', $request->boolean('status')))
             ->when($request->filled('enhanced'), fn ($query) => $query->where('artwork_enhanced', $request->boolean('enhanced')))
-            ->when($request->filled('stack'), fn ($query) => $query->where('stack_id', $request->integer('stack')))
-            ->orderBy('score')->paginate(25)->withQueryString();
+            ->when($request->filled('stack'), fn ($query) => $query->where('stack_id', $request->integer('stack')));
+
+        $sortByWeight = $request->string('sort')->toString() === 'artwork_weight';
+        if ($sortByWeight) {
+            $direction = $request->string('direction')->lower()->toString() === 'desc' ? 'desc' : 'asc';
+            $allCards = $cardQuery->get()->each(function (Card $card) {
+                $card->setAttribute('artwork_bytes', $this->artworkBytes($card->image));
+            })->sortBy(fn (Card $card) => $card->artwork_bytes ?? -1, SORT_NUMERIC, $direction === 'desc')->values();
+            $perPage = 25;
+            $page = max(1, LengthAwarePaginator::resolveCurrentPage());
+            $cards = new LengthAwarePaginator(
+                $allCards->forPage($page, $perPage)->values(),
+                $allCards->count(),
+                $perPage,
+                $page,
+                ['path' => $request->url(), 'query' => $request->query()]
+            );
+        } else {
+            $cards = $cardQuery->orderBy('score')->paginate(25)->withQueryString();
+            $cards->getCollection()->each(function (Card $card) {
+                $card->setAttribute('artwork_bytes', $this->artworkBytes($card->image));
+            });
+        }
         $stacks = Stack::query()->orderBy('name')->get();
         $artworks = Card::query()
             ->whereNotNull('image')->where('image', '!=', '0')->where('image', '!=', '')
             ->orderBy('title')->get(['id', 'title', 'image', 'artwork_enhanced']);
 
         return view('cms.cards.index', compact('artworks', 'cards', 'stacks'));
+    }
+
+    private function artworkBytes(?string $path): ?int
+    {
+        if (! $path || $path === '0' || Str::startsWith($path, ['http://', 'https://'])) {
+            return null;
+        }
+
+        $storagePath = preg_replace('#^storage/#', '', ltrim($path, '/'));
+        try {
+            return Storage::disk('public')->exists($storagePath)
+                ? Storage::disk('public')->size($storagePath)
+                : null;
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     public function create()

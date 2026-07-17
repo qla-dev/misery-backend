@@ -32,7 +32,9 @@ class GameController extends Controller
         return new GameResource($game->load([
             'members',
             'currentCard',
-            'moves' => fn ($q) => $q->with(['player', 'card'])->latest(),
+            // Bound realtime snapshot size so long matches cannot create an
+            // ever-growing JSON parse/render spike on mobile clients.
+            'moves' => fn ($q) => $q->with(['player', 'card'])->latest()->limit(100),
             'messages' => fn ($q) => $q->with('user')->latest()->limit(100),
         ]));
     }
