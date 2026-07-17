@@ -67,7 +67,11 @@ class CardController extends Controller
             });
         }
         $stacks = Stack::query()->orderBy('name')->get();
-        $assets = collect(Storage::disk('public')->allFiles('cards'))
+        $assets = collect([
+            ...Storage::disk('public')->allFiles('cards'),
+            ...Storage::disk('public')->allFiles('generated'),
+        ])
+            ->unique()
             ->filter(fn (string $path) => in_array(Str::lower(pathinfo($path, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'webp', 'png', 'gif', 'avif'], true))
             ->map(function (string $path): array {
                 $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
@@ -201,7 +205,7 @@ class CardController extends Controller
         $data = $request->validate(['asset_path' => ['required', 'string', 'max:2048']]);
         $path = str_replace('\\', '/', ltrim($data['asset_path'], '/'));
         $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
-        abort_if(str_contains($path, '../') || ! Str::startsWith($path, 'cards/'), 422, 'The selected asset path is invalid.');
+        abort_if(str_contains($path, '../') || ! Str::startsWith($path, ['cards/', 'generated/']), 422, 'The selected asset path is invalid.');
         abort_unless(in_array($extension, ['jpg', 'jpeg', 'webp', 'png', 'gif', 'avif'], true), 422, 'The selected asset is not a supported image.');
         abort_unless(Storage::disk('public')->exists($path), 422, 'The selected asset is unavailable.');
 

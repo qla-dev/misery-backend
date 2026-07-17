@@ -228,6 +228,7 @@ class CmsTest extends TestCase
         $stack = Stack::where('slug', 'normal')->firstOrFail();
         Storage::disk('public')->put('cards/uploads/one.jpg', 'one');
         Storage::disk('public')->put('cards/uploads/two.jpg', 'two');
+        Storage::disk('public')->put('generated/card-89-enhanced-example.webp', 'root-generated');
         $first = Card::create(['title' => 'First art', 'score' => 10, 'image' => 'cards/uploads/one.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
         $second = Card::create(['title' => 'Second art', 'score' => 20, 'image' => 'cards/uploads/two.jpg', 'artwork_enhanced' => true, 'deck' => 'normal', 'stack_id' => $stack->id]);
         $third = Card::create(['title' => 'Third art', 'score' => 30, 'image' => 'cards/uploads/one.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
@@ -235,7 +236,9 @@ class CmsTest extends TestCase
 
         $this->withServerVariables($server)->get('/cms/cards')->assertOk()
             ->assertSee('data-asset-path="cards/uploads/one.jpg"', false)
-            ->assertSee('data-asset-path="cards/uploads/two.jpg"', false);
+            ->assertSee('data-asset-path="cards/uploads/two.jpg"', false)
+            ->assertSee('data-asset-path="generated/card-89-enhanced-example.webp"', false)
+            ->assertSee('data-asset-format="webp"', false);
 
         $this->withServerVariables($server)->postJson('/cms/cards/'.$third->id.'/assign-artwork', ['asset_path' => 'cards/uploads/two.jpg'])
             ->assertOk()->assertJsonPath('artwork_enhanced', false);
