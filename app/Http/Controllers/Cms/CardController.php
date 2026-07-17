@@ -174,10 +174,7 @@ class CardController extends Controller
 
     public function destroy(Request $request, Card $card)
     {
-        $image = $card->image;
-        $this->deleteManagedSvg($card->svg_img);
         $card->delete();
-        $this->deleteManagedImageIfUnused($image);
 
         if (! $request->filled('return')) {
             $request->merge(['return' => (string) $request->headers->get('referer', '')]);
@@ -190,12 +187,8 @@ class CardController extends Controller
     {
         $data = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer', 'distinct', 'exists:cards,id']]);
         $cards = Card::query()->whereKey($data['ids'])->get();
-        $images = $cards->pluck('image')->filter()->unique()->values();
-        $svgs = $cards->pluck('svg_img')->filter()->unique()->values();
 
         DB::transaction(fn () => Card::query()->whereKey($cards->modelKeys())->delete());
-        $images->each(fn ($path) => $this->deleteManagedImageIfUnused($path));
-        $svgs->each(fn ($path) => $this->deleteManagedSvg($path));
 
         return response()->json(['deleted' => $cards->count(), 'ids' => $cards->modelKeys()]);
     }
@@ -597,7 +590,6 @@ class CardController extends Controller
             abort_if(strlen($webp) > self::MAX_GENERATED_JPEG_BYTES, 502, 'Generated WebP could not be optimized below 100 KB without unacceptable quality loss. Please generate it again.');
             Storage::disk('public')->put($path, $webp);
             abort_unless(Storage::disk('public')->exists($path), 500, 'Generated WebP was not found after writing it to storage.');
-            $this->deleteManagedImage($card->image);
             $card->update(['image' => $path, 'artwork_enhanced' => false]);
         } catch (Throwable $error) {
             Log::error('CMS artwork generation image processing failed', $logContext + [
@@ -704,7 +696,6 @@ class CardController extends Controller
         abort_unless(Storage::disk('public')->exists($path), 500, 'The converted WebP artwork was not found after writing it to storage.');
 
         $card->update(['image' => $path]);
-        $this->deleteManagedImage($previousPath);
 
         return response()->json([
             'bytes' => strlen($webp),
@@ -1530,7 +1521,6 @@ class CardController extends Controller
         if (! $request->hasFile('image_upload')) {
             return;
         }
-        $this->deleteManagedImage($card->image);
         $upload = $request->file('image_upload');
         $extension = Str::lower($upload->guessExtension() ?: $upload->getClientOriginalExtension());
         $formatFolder = match ($extension) {

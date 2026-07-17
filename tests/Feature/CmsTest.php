@@ -222,7 +222,7 @@ class CmsTest extends TestCase
             ->assertSee('art-thumb__preview', false);
     }
 
-    public function test_cms_can_assign_swap_and_bulk_delete_card_artwork_safely(): void
+    public function test_cms_can_assign_swap_and_bulk_delete_cards_without_deleting_artwork(): void
     {
         Storage::fake('public');
         $stack = Stack::where('slug', 'normal')->firstOrFail();
@@ -255,7 +255,7 @@ class CmsTest extends TestCase
         $this->assertDatabaseMissing('cards', ['id' => $first->id]);
         $this->assertDatabaseMissing('cards', ['id' => $third->id]);
         Storage::disk('public')->assertExists('cards/uploads/one.jpg');
-        Storage::disk('public')->assertMissing('cards/uploads/two.jpg');
+        Storage::disk('public')->assertExists('cards/uploads/two.jpg');
     }
 
     public function test_cms_updates_stack_presentation_exposed_to_native_clients(): void
@@ -383,11 +383,13 @@ class CmsTest extends TestCase
             ->assertOk()
             ->assertSee('generatedCropForm');
 
-        $inlineCard = Card::create(['title' => 'Inline generation', 'score' => 14, 'image' => '0', 'deck' => 'normal', 'stack_id' => $stack->id]);
+        Storage::disk('public')->put('cards/uploads/original-before-generation.jpg', 'original');
+        $inlineCard = Card::create(['title' => 'Inline generation', 'score' => 14, 'image' => 'cards/uploads/original-before-generation.jpg', 'deck' => 'normal', 'stack_id' => $stack->id]);
         $this->withServerVariables($server)->postJson('/cms/cards/'.$inlineCard->id.'/generate')
             ->assertOk()
             ->assertJsonPath('image', fn (string $image) => str_contains($image, '/card-images/cards/generated/webp/card-'.$inlineCard->id.'-'));
         $this->assertNotSame('0', $inlineCard->fresh()->image);
+        Storage::disk('public')->assertExists('cards/uploads/original-before-generation.jpg');
         Http::assertSent(function ($request) {
             $reference = $request['input_references'][0]['image_url']['url'];
             $referencePng = base64_decode(str_replace('data:image/png;base64,', '', $reference), true);
@@ -672,7 +674,7 @@ class CmsTest extends TestCase
 
         $path = $card->fresh()->image;
         $this->assertStringEndsWith('.webp', $path);
-        Storage::disk('public')->assertMissing($originalPath);
+        Storage::disk('public')->assertExists($originalPath);
         Storage::disk('public')->assertExists($path);
         $bytes = Storage::disk('public')->get($path);
         $this->assertLessThanOrEqual(100 * 1024, strlen($bytes));
