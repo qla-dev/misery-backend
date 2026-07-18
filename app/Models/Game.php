@@ -30,6 +30,11 @@ class Game extends Model
         return $this->hasMany(GameMessage::class);
     }
 
+    public function events()
+    {
+        return $this->hasMany(GameEvent::class);
+    }
+
     public function currentCard()
     {
         return $this->belongsTo(Card::class, 'current_card_id');

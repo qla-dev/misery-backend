@@ -11,6 +11,7 @@ use App\Http\Resources\UserResource;
 use App\Models\Card;
 use App\Models\Game;
 use App\Models\GameMessage;
+use App\Models\GameEvent;
 use App\Models\Move;
 use App\Models\Stack;
 use App\Models\User;
@@ -36,7 +37,18 @@ class GameController extends Controller
             // ever-growing JSON parse/render spike on mobile clients.
             'moves' => fn ($q) => $q->with(['player', 'card'])->latest()->limit(100),
             'messages' => fn ($q) => $q->with('user')->latest()->limit(100),
+            'events' => fn ($q) => $q->latest()->limit(200),
         ]));
+    }
+
+    private function recordGameEvent(Game $game, string $type, ?int $targetUserId = null, array $payload = []): GameEvent
+    {
+        return GameEvent::create([
+            'game_id' => $game->id,
+            'type' => $type,
+            'target_user_id' => $targetUserId,
+            'payload' => $payload,
+        ]);
     }
 
     private function broadcastGameUpdated(Game|int $game, string $reason, ?string $driverOverride = null): void
@@ -151,6 +163,22 @@ class GameController extends Controller
             }
         }
         $game->save();
+        if ($game->winner_id) {
+            return;
+        }
+        if ($game->is_steal_turn) {
+            $nextActor = User::find($game->current_player_id);
+            $this->recordGameEvent($game, 'STEAL_OFFERED', (int) $game->current_player_id, [
+                'player_id' => (int) $game->current_player_id,
+                'player_name' => $nextActor?->name,
+                'card_id' => $game->current_card_id,
+            ]);
+        } else {
+            $this->recordGameEvent($game, 'TURN_STARTED', (int) $game->current_player_id, [
+                'card_id' => $game->current_card_id,
+                'is_steal' => false,
+            ]);
+        }
     }
 
     private function refreshPresence(Game $game, int $requestingUserId): Game
@@ -590,6 +618,7 @@ class GameController extends Controller
                     ->delete();
                 DB::table('game_cards')->where('game_id', $game->id)->delete();
                 $game->moves()->delete();
+                $game->events()->delete();
                 $game->update([
                     'started' => false,
                     'current_card_id' => null,
@@ -635,6 +664,10 @@ class GameController extends Controller
                 DB::table('game_cards')->insert(['game_id' => $game->id, 'user_id' => null, 'card_id' => $current->id, 'created_at' => now(), 'updated_at' => now()]);
                 $game->update(['started' => true, 'host_in_lobby' => false, 'current_card_id' => $current->id, 'current_player_id' => $firstPlayerId, 'turn_owner_id' => $firstPlayerId, 'is_steal_turn' => false]);
                 DB::table('members')->where('game_id', $game->id)->update(['in_lobby' => false, 'updated_at' => now()]);
+                $this->recordGameEvent($game, 'TURN_STARTED', $firstPlayerId, [
+                    'card_id' => $current->id,
+                    'is_steal' => false,
+                ]);
 
                 Log::info('Game started successfully', [
                     'game_id' => $game->id,
@@ -660,7 +693,11 @@ class GameController extends Controller
             abort_unless($game->started, 422, 'Game has not started.');
             abort_if($game->winner_id, 409, 'This game has already finished.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'It is not your turn.');
-            $move = Move::create(['game_id' => $game->id, 'player_id' => $data['player_id'], 'card_id' => $game->current_card_id, 'correct' => $data['correct'], 'is_steal' => $game->is_steal_turn]);
+            $wasSteal = (bool) $game->is_steal_turn;
+            $turnOwnerId = (int) $game->turn_owner_id;
+            $card = Card::find($game->current_card_id);
+            $actor = User::findOrFail($data['player_id']);
+            $move = Move::create(['game_id' => $game->id, 'player_id' => $data['player_id'], 'card_id' => $game->current_card_id, 'correct' => $data['correct'], 'is_steal' => $wasSteal]);
             if ($data['correct']) {
                 DB::table('game_cards')->where('game_id', $game->id)->where('card_id', $game->current_card_id)->update(['user_id' => $data['player_id'], 'updated_at' => now()]);
             }
@@ -683,6 +720,41 @@ class GameController extends Controller
                 // once every eligible player has attempted the card.
                 $this->advanceStealOrRound($game, false);
             }
+            $this->recordGameEvent($game, 'MOVE_RESULT', null, [
+                'move_id' => $move->id,
+                'player_id' => (int) $actor->id,
+                'player_name' => $actor->name,
+                'card_id' => $card?->id,
+                'score' => $card ? (float) $card->score : null,
+                'correct' => (bool) $data['correct'],
+                'is_steal' => $wasSteal,
+                'turn_owner_id' => $turnOwnerId,
+            ]);
+            if ($game->winner_id) {
+                $this->recordGameEvent($game, 'GAME_FINISHED', null, [
+                    'winner_id' => (int) $game->winner_id,
+                ]);
+            } elseif ($game->is_steal_turn) {
+                $nextActor = User::find($game->current_player_id);
+                if (! $wasSteal) {
+                    $this->recordGameEvent($game, 'TURN_HOLD', $turnOwnerId, [
+                        'player_id' => (int) $game->current_player_id,
+                        'player_name' => $nextActor?->name,
+                        'card_id' => $card?->id,
+                    ]);
+                }
+                $this->recordGameEvent($game, 'STEAL_OFFERED', (int) $game->current_player_id, [
+                    'player_id' => (int) $game->current_player_id,
+                    'player_name' => $nextActor?->name,
+                    'card_id' => $card?->id,
+                ]);
+            } else {
+                $this->recordGameEvent($game, 'TURN_ENDED', $turnOwnerId, ['card_id' => $card?->id]);
+                $this->recordGameEvent($game, 'TURN_STARTED', (int) $game->current_player_id, [
+                    'card_id' => $game->current_card_id,
+                    'is_steal' => false,
+                ]);
+            }
             $this->broadcastGameUpdated($game, 'move.created');
 
             return response()->json(['move' => new MoveResource($move->load(['player', 'card'])), 'game' => $this->full($game)]);
@@ -699,7 +771,23 @@ class GameController extends Controller
             $this->ensurePlayable($game);
             abort_unless($game->is_steal_turn, 409, 'There is no steal to pass.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'Only the active stealer can pass.');
+            $turnOwnerId = (int) $game->turn_owner_id;
+            $cardId = $game->current_card_id;
             $this->advanceStealOrRound($game, false);
+            if ($game->is_steal_turn) {
+                $nextActor = User::find($game->current_player_id);
+                $this->recordGameEvent($game, 'STEAL_OFFERED', (int) $game->current_player_id, [
+                    'player_id' => (int) $game->current_player_id,
+                    'player_name' => $nextActor?->name,
+                    'card_id' => $cardId,
+                ]);
+            } else {
+                $this->recordGameEvent($game, 'TURN_ENDED', $turnOwnerId, ['card_id' => $cardId]);
+                $this->recordGameEvent($game, 'TURN_STARTED', (int) $game->current_player_id, [
+                    'card_id' => $game->current_card_id,
+                    'is_steal' => false,
+                ]);
+            }
             $this->broadcastGameUpdated($game, 'steal.passed');
 
             return response()->json(['game' => $this->full($game)]);

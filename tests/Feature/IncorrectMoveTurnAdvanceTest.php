@@ -81,21 +81,29 @@ class IncorrectMoveTurnAdvanceTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->postJson("/api/games/{$game->id}/moves", [
+        $response = $this->postJson("/api/games/{$game->id}/moves", [
             'player_id' => $owner->id,
             'correct' => false,
         ])->assertOk()
             ->assertJsonPath('move.is_steal', false);
+        $this->assertSame(
+            ['MOVE_RESULT', 'TURN_HOLD', 'STEAL_OFFERED'],
+            collect($response->json('game.events'))->pluck('type')->all(),
+        );
 
         $game->refresh();
         $this->assertTrue($game->is_steal_turn);
         $this->assertSame($stealer->id, $game->current_player_id);
 
-        $this->postJson("/api/games/{$game->id}/moves", [
+        $response = $this->postJson("/api/games/{$game->id}/moves", [
             'player_id' => $stealer->id,
             'correct' => false,
         ])->assertOk()
             ->assertJsonPath('move.is_steal', true);
+        $this->assertSame(
+            ['MOVE_RESULT', 'TURN_HOLD', 'STEAL_OFFERED', 'MOVE_RESULT', 'TURN_ENDED', 'TURN_STARTED'],
+            collect($response->json('game.events'))->pluck('type')->all(),
+        );
 
         $game->refresh();
         $this->assertFalse($game->is_steal_turn);
@@ -140,10 +148,14 @@ class IncorrectMoveTurnAdvanceTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->postJson("/api/games/{$game->id}/moves", [
+        $response = $this->postJson("/api/games/{$game->id}/moves", [
             'player_id' => $player->id,
             'correct' => true,
         ])->assertOk();
+        $this->assertSame(
+            ['MOVE_RESULT', 'GAME_FINISHED'],
+            collect($response->json('game.events'))->pluck('type')->all(),
+        );
 
         $game->refresh();
         $this->assertSame($player->id, $game->winner_id);

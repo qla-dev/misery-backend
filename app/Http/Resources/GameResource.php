@@ -79,6 +79,9 @@ class GameResource extends JsonResource
                 ->values(),
             'hands' => $hands,
             'moves' => MoveResource::collection($this->whenLoaded('moves')),
+            'events' => $this->relationLoaded('events')
+                ? GameEventResource::collection($this->events->sortBy('id')->values())
+                : [],
             'chat_messages' => $this->relationLoaded('messages')
                 ? GameMessageResource::collection($this->messages->sortBy('id')->values())
                 : [],
