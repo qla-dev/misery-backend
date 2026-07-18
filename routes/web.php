@@ -127,6 +127,7 @@ Route::get('/card-images/{path}', function (string $path) {
 Route::middleware('cms.auth')->prefix('cms')->name('cms.')->group(function () {
     Route::view('/', 'cms.home')->name('home');
     Route::get('gallery', [CmsCardController::class, 'gallery'])->name('gallery.index');
+    Route::get('playground', [CmsCardController::class, 'playground'])->name('playground.index');
     Route::get('native-card-artwork', function () {
         return response()->file(base_path('../frontend/assets/images/def-card.png'), [
             'Cache-Control' => 'public, max-age=86400',

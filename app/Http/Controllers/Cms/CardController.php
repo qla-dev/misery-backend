@@ -112,6 +112,36 @@ class CardController extends Controller
         return view('cms.gallery.index', compact('assets', 'cards'));
     }
 
+    public function playground()
+    {
+        $cards = Card::query()
+            ->with('stack')
+            ->whereNotNull('image')
+            ->where('image', '!=', '0')
+            ->orderBy('id')
+            ->get()
+            ->map(function (Card $card): array {
+                $path = str_replace('\\', '/', ltrim((string) $card->image, '/'));
+                $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
+                $canCopy = Str::startsWith($path, ['cards/', 'generated/'])
+                    && in_array($extension, ['jpg', 'jpeg', 'webp', 'png', 'gif', 'avif'], true)
+                    && Storage::disk('public')->exists($path);
+
+                return [
+                    'id' => $card->id,
+                    'title' => $card->title,
+                    'title_bs' => $card->title_bs,
+                    'score' => number_format((float) $card->score, 2, '.', ''),
+                    'stack' => $card->stack?->name ?? $card->deck,
+                    'image' => $this->cardImageUrl($card->image),
+                    'asset_path' => $canCopy ? $path : null,
+                    'assign_url' => route('cms.cards.assign-artwork', $card),
+                ];
+            });
+
+        return view('cms.playground.index', compact('cards'));
+    }
+
     private function artworkAssets()
     {
         return collect([
