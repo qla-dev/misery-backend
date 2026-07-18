@@ -95,7 +95,7 @@ class CardController extends Controller
         $assets = $this->artworkAssets();
         $cards = Card::query()
             ->with('stack')
-            ->orderBy('title')
+            ->orderBy('id')
             ->get()
             ->map(function (Card $card): array {
                 return [
