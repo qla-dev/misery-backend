@@ -17,7 +17,7 @@ class Game extends Model
 
     public function members()
     {
-        return $this->belongsToMany(User::class, 'members')->withTimestamps();
+        return $this->belongsToMany(User::class, 'members')->withPivot('in_lobby')->withTimestamps();
     }
 
     public function moves()

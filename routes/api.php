@@ -40,6 +40,7 @@ Route::apiResources(['users' => UserController::class, 'games' => GameController
 Route::get('games/code/{code}', [GameController::class, 'byCode']);
 Route::post('games/code/{code}/join', [GameController::class, 'join']);
 Route::post('games/{game}/host-lobby-presence', [GameController::class, 'setHostLobbyPresence']);
+Route::post('games/{game}/lobby-presence', [GameController::class, 'setLobbyPresence']);
 Route::post('games/{game}/lock', [GameController::class, 'lockRoom']);
 Route::post('games/{game}/kick', [GameController::class, 'kickPlayer']);
 Route::post('games/{game}/start', [GameController::class, 'start']);

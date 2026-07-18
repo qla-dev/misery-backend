@@ -72,6 +72,12 @@ class GameResource extends JsonResource
             ] : null,
             'current_card' => new CardResource($this->whenLoaded('currentCard')),
             'members' => UserResource::collection($this->whenLoaded('members')),
+            'lobby_member_ids' => DB::table('members')
+                ->where('game_id', $this->id)
+                ->where('in_lobby', true)
+                ->pluck('user_id')
+                ->map(fn ($id) => (int) $id)
+                ->values(),
             'hands' => $hands,
             'moves' => MoveResource::collection($this->whenLoaded('moves')),
             'chat_messages' => $this->relationLoaded('messages')

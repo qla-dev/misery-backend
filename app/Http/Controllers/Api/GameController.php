@@ -395,6 +395,30 @@ class GameController extends Controller
         return $this->full($game);
     }
 
+    public function setLobbyPresence(Request $request, Game $game)
+    {
+        $data = $request->validate(['user_id' => 'required|integer', 'present' => 'required|boolean']);
+        $userId = (int) $data['user_id'];
+        $this->ensurePlayable($game);
+        abort_unless(
+            DB::table('members')->where('game_id', $game->id)->where('user_id', $userId)->exists(),
+            404,
+            'Player is not in this room.'
+        );
+        abort_unless($game->winner_id, 409, 'Lobby presence can only change after a finished game.');
+
+        DB::table('members')
+            ->where('game_id', $game->id)
+            ->where('user_id', $userId)
+            ->update(['in_lobby' => (bool) $data['present'], 'updated_at' => now()]);
+        if ($userId === (int) $game->owner_id) {
+            $game->update(['host_in_lobby' => (bool) $data['present']]);
+        }
+        $this->broadcastGameUpdated($game, 'member.lobby-presence');
+
+        return $this->full($game->refresh());
+    }
+
     public function lockRoom(Request $request, Game $game)
     {
         $data = $request->validate([
@@ -536,6 +560,14 @@ class GameController extends Controller
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
             $this->ensurePlayable($game);
             if ($game->started && $game->winner_id) {
+                $readyMemberIds = DB::table('members')
+                    ->where('game_id', $game->id)
+                    ->where('in_lobby', true)
+                    ->pluck('user_id');
+                DB::table('members')
+                    ->where('game_id', $game->id)
+                    ->whereNotIn('user_id', $readyMemberIds)
+                    ->delete();
                 DB::table('game_cards')->where('game_id', $game->id)->delete();
                 $game->moves()->delete();
                 $game->update([
@@ -583,6 +615,7 @@ class GameController extends Controller
                 $firstPlayerId = $this->memberIds($game)[0];
                 DB::table('game_cards')->insert(['game_id' => $game->id, 'user_id' => null, 'card_id' => $current->id, 'created_at' => now(), 'updated_at' => now()]);
                 $game->update(['started' => true, 'host_in_lobby' => false, 'current_card_id' => $current->id, 'current_player_id' => $firstPlayerId, 'turn_owner_id' => $firstPlayerId, 'awaiting_finish' => false, 'is_steal_turn' => false]);
+                DB::table('members')->where('game_id', $game->id)->update(['in_lobby' => false, 'updated_at' => now()]);
 
                 Log::info('Game started successfully', [
                     'game_id' => $game->id,
