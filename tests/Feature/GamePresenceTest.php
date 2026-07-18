@@ -174,11 +174,6 @@ class GamePresenceTest extends TestCase
 
         $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
 
-        $game->update(['current_player_id' => $guest->id, 'turn_owner_id' => $guest->id, 'awaiting_finish' => true]);
-        $this->postJson("/api/games/{$game->id}/inactivity-timeout", ['user_id' => $guest->id])
-            ->assertStatus(409);
-
-        $this->assertDatabaseHas('members', ['game_id' => $game->id, 'user_id' => $guest->id]);
     }
 
     public function test_host_can_remove_a_guest_only_while_in_the_lobby(): void

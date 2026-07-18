@@ -24,6 +24,22 @@ class SimulatorAdminTest extends TestCase
             ->assertSee("'X-CSRF-TOKEN':csrfToken", false);
     }
 
+    public function test_simulator_uses_the_atomic_move_flow_without_finish_turn(): void
+    {
+        $server = [
+            'PHP_AUTH_USER' => config('cms.username'),
+            'PHP_AUTH_PW' => config('cms.password'),
+        ];
+
+        $this->withServerVariables($server)
+            ->get('/simulator')
+            ->assertOk()
+            ->assertSee('movePending=true', false)
+            ->assertDontSee('finishTurn', false)
+            ->assertDontSee('awaiting_finish', false)
+            ->assertDontSee('/finish-turn', false);
+    }
+
     public function test_admin_api_can_force_delete_a_started_game_without_csrf(): void
     {
         $host = User::create(['name' => 'Host']);

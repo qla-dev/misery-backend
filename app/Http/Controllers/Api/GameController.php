@@ -101,7 +101,6 @@ class GameController extends Controller
             'host_in_lobby' => false,
             'current_player_id' => null,
             'turn_owner_id' => null,
-            'awaiting_finish' => false,
             'is_steal_turn' => false,
         ]);
         DB::table('members')->where('game_id', $game->id)->delete();
@@ -113,7 +112,7 @@ class GameController extends Controller
         DB::table('game_cards')->where('game_id', $game->id)->whereIn('user_id', $removedMemberIds)->delete();
         $remaining = $this->memberIds($game);
         if (! $remaining) {
-            $game->update(['current_player_id' => null, 'turn_owner_id' => null, 'awaiting_finish' => false, 'is_steal_turn' => false]);
+            $game->update(['current_player_id' => null, 'turn_owner_id' => null, 'is_steal_turn' => false]);
 
             return;
         }
@@ -149,7 +148,6 @@ class GameController extends Controller
                 $game->is_steal_turn = true;
             }
         }
-        $game->awaiting_finish = false;
         $game->save();
     }
 
@@ -255,7 +253,6 @@ class GameController extends Controller
             $game->current_player_id = $nextActorId;
             $game->is_steal_turn = true;
         }
-        $game->awaiting_finish = false;
         $game->save();
     }
 
@@ -576,7 +573,6 @@ class GameController extends Controller
                     'current_player_id' => null,
                     'turn_owner_id' => null,
                     'winner_id' => null,
-                    'awaiting_finish' => false,
                     'is_steal_turn' => false,
                 ]);
             }
@@ -614,7 +610,7 @@ class GameController extends Controller
                 $current = $cards->shift();
                 $firstPlayerId = $this->memberIds($game)[0];
                 DB::table('game_cards')->insert(['game_id' => $game->id, 'user_id' => null, 'card_id' => $current->id, 'created_at' => now(), 'updated_at' => now()]);
-                $game->update(['started' => true, 'host_in_lobby' => false, 'current_card_id' => $current->id, 'current_player_id' => $firstPlayerId, 'turn_owner_id' => $firstPlayerId, 'awaiting_finish' => false, 'is_steal_turn' => false]);
+                $game->update(['started' => true, 'host_in_lobby' => false, 'current_card_id' => $current->id, 'current_player_id' => $firstPlayerId, 'turn_owner_id' => $firstPlayerId, 'is_steal_turn' => false]);
                 DB::table('members')->where('game_id', $game->id)->update(['in_lobby' => false, 'updated_at' => now()]);
 
                 Log::info('Game started successfully', [
@@ -641,7 +637,6 @@ class GameController extends Controller
             abort_unless($game->started, 422, 'Game has not started.');
             abort_if($game->winner_id, 409, 'This game has already finished.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'It is not your turn.');
-            abort_if($game->awaiting_finish, 409, 'Finish the current turn first.');
             $move = Move::create(['game_id' => $game->id, 'player_id' => $data['player_id'], 'card_id' => $game->current_card_id, 'correct' => $data['correct']]);
             if ($data['correct']) {
                 DB::table('game_cards')->where('game_id', $game->id)->where('card_id', $game->current_card_id)->update(['user_id' => $data['player_id'], 'updated_at' => now()]);
@@ -653,9 +648,11 @@ class GameController extends Controller
                     ->count();
                 $points = max(0, $ownedCardCount - 3);
                 if ($points >= $game->target_score) {
-                    $game->update(['winner_id' => $data['player_id'], 'awaiting_finish' => false, 'is_steal_turn' => false]);
+                    $game->update(['winner_id' => $data['player_id'], 'is_steal_turn' => false]);
                 } else {
-                    $game->update(['awaiting_finish' => true]);
+                    // A correct placement completes the round immediately. Visual
+                    // result and turn notices are queued independently by clients.
+                    $this->advanceStealOrRound($game, true);
                 }
             } else {
                 // An incorrect placement never needs a separate confirmation.
@@ -669,24 +666,6 @@ class GameController extends Controller
         });
     }
 
-    public function finishTurn(Request $request, Game $game)
-    {
-        $this->ensurePlayable($game);
-        $data = $request->validate(['player_id' => 'required|integer']);
-
-        return DB::transaction(function () use ($data, $game) {
-            $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
-            $this->ensurePlayable($game);
-            abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'Only the active player can finish this turn.');
-            abort_unless($game->awaiting_finish, 409, 'There is no completed turn to finish.');
-            $move = Move::where('game_id', $game->id)->latest()->firstOrFail();
-            $this->advanceStealOrRound($game, (bool) $move->correct);
-            $this->broadcastGameUpdated($game, 'turn.finished');
-
-            return response()->json(['game' => $this->full($game)]);
-        });
-    }
-
     public function passSteal(Request $request, Game $game)
     {
         $this->ensurePlayable($game);
@@ -695,7 +674,7 @@ class GameController extends Controller
         return DB::transaction(function () use ($data, $game) {
             $game = Game::whereKey($game->id)->lockForUpdate()->firstOrFail();
             $this->ensurePlayable($game);
-            abort_unless($game->is_steal_turn && ! $game->awaiting_finish, 409, 'There is no steal to pass.');
+            abort_unless($game->is_steal_turn, 409, 'There is no steal to pass.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'Only the active stealer can pass.');
             $this->advanceStealOrRound($game, false);
             $this->broadcastGameUpdated($game, 'steal.passed');
@@ -719,7 +698,6 @@ class GameController extends Controller
             $originalMemberIds = $this->memberIds($game);
             abort_unless(in_array($userId, $originalMemberIds, true), 404, 'Player is not in this room.');
             abort_if($game->winner_id, 409, 'The game has already finished.');
-            abort_if($game->awaiting_finish, 409, 'The completed turn can no longer expire from inactivity.');
             abort_unless((int) $game->current_player_id === $userId, 409, 'This player is no longer the active player.');
 
             if ($userId === (int) $game->owner_id) {

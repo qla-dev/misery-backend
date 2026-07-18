@@ -44,7 +44,6 @@ class GameResource extends JsonResource
             'winner_id' => $this->winner_id,
             'current_player_id' => $this->current_player_id,
             'turn_owner_id' => $this->turn_owner_id,
-            'awaiting_finish' => $this->awaiting_finish,
             'is_steal_turn' => $this->is_steal_turn,
             'sync_driver' => $syncDriver,
             'ingame_polling_interval_ms' => config('game.ingame_polling_interval_ms'),
