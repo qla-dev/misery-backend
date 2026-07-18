@@ -84,7 +84,8 @@ class IncorrectMoveTurnAdvanceTest extends TestCase
         $this->postJson("/api/games/{$game->id}/moves", [
             'player_id' => $owner->id,
             'correct' => false,
-        ])->assertOk();
+        ])->assertOk()
+            ->assertJsonPath('move.is_steal', false);
 
         $game->refresh();
         $this->assertTrue($game->is_steal_turn);
@@ -93,7 +94,8 @@ class IncorrectMoveTurnAdvanceTest extends TestCase
         $this->postJson("/api/games/{$game->id}/moves", [
             'player_id' => $stealer->id,
             'correct' => false,
-        ])->assertOk();
+        ])->assertOk()
+            ->assertJsonPath('move.is_steal', true);
 
         $game->refresh();
         $this->assertFalse($game->is_steal_turn);

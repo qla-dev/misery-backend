@@ -639,7 +639,7 @@ class GameController extends Controller
             abort_unless($game->started, 422, 'Game has not started.');
             abort_if($game->winner_id, 409, 'This game has already finished.');
             abort_unless((int) $game->current_player_id === (int) $data['player_id'], 409, 'It is not your turn.');
-            $move = Move::create(['game_id' => $game->id, 'player_id' => $data['player_id'], 'card_id' => $game->current_card_id, 'correct' => $data['correct']]);
+            $move = Move::create(['game_id' => $game->id, 'player_id' => $data['player_id'], 'card_id' => $game->current_card_id, 'correct' => $data['correct'], 'is_steal' => $game->is_steal_turn]);
             if ($data['correct']) {
                 DB::table('game_cards')->where('game_id', $game->id)->where('card_id', $game->current_card_id)->update(['user_id' => $data['player_id'], 'updated_at' => now()]);
             }
