@@ -260,8 +260,18 @@ class GameController extends Controller
 
     public function index()
     {
+        $games = Game::where('is_private', false)
+            ->whereNull('terminated_at')
+            ->with('members')
+            ->latest()
+            ->get()
+            ->filter(fn (Game $game) => $game->started
+                ? $game->winner_id === null
+                : $game->members->count() < config('game.max_players'))
+            ->values();
+
         return GameResource::collection(
-            Game::where('started', false)->where('is_private', false)->whereNull('terminated_at')->with('members')->has('members', '<', config('game.max_players'))->latest()->get()
+            $games
         );
     }
 

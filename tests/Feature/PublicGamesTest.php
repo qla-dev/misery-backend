@@ -49,19 +49,22 @@ class PublicGamesTest extends TestCase
             ->assertHeader('Content-Type', 'image/png');
     }
 
-    public function test_native_public_games_never_include_started_games(): void
+    public function test_public_games_include_active_started_games_without_finished_games(): void
     {
         $lobbyHost = User::factory()->create();
         $startedHost = User::factory()->create();
         $lobby = Game::create(['code' => 'OPEN1234', 'owner_id' => $lobbyHost->id, 'started' => false]);
         $started = Game::create(['code' => 'PLAY1234', 'owner_id' => $startedHost->id, 'started' => true]);
+        $finished = Game::create(['code' => 'DONE1234', 'owner_id' => $startedHost->id, 'started' => true, 'winner_id' => $startedHost->id]);
         $lobby->members()->attach($lobbyHost);
         $started->members()->attach($startedHost);
+        $finished->members()->attach($startedHost);
 
         $this->getJson('/api/games')
             ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.code', 'OPEN1234')
-            ->assertJsonMissing(['code' => 'PLAY1234']);
+            ->assertJsonCount(2, 'data')
+            ->assertJsonFragment(['code' => 'OPEN1234', 'started' => false])
+            ->assertJsonFragment(['code' => 'PLAY1234', 'started' => true])
+            ->assertJsonMissing(['code' => 'DONE1234']);
     }
 }
