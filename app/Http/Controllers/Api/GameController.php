@@ -50,20 +50,22 @@ class GameController extends Controller
         }
 
         DB::afterCommit(function () use ($gameId, $reason, $driver) {
-            try {
-                if ($driver === 'ably') {
-                    $this->transportAllocator->publishAblyGameUpdate($gameId, $reason);
-                } else {
-                    GameUpdated::dispatch($gameId, $reason, $driver);
+            dispatch(function () use ($gameId, $reason, $driver) {
+                try {
+                    if ($driver === 'ably') {
+                        app(RealtimeTransportAllocator::class)->publishAblyGameUpdate($gameId, $reason);
+                    } else {
+                        GameUpdated::dispatch($gameId, $reason, $driver);
+                    }
+                } catch (\Throwable $error) {
+                    Log::error('Realtime game update failed', [
+                        'game_id' => $gameId,
+                        'driver' => $driver,
+                        'reason' => $reason,
+                        'message' => $error->getMessage(),
+                    ]);
                 }
-            } catch (\Throwable $error) {
-                Log::error('Realtime game update failed', [
-                    'game_id' => $gameId,
-                    'driver' => $driver,
-                    'reason' => $reason,
-                    'message' => $error->getMessage(),
-                ]);
-            }
+            })->afterResponse();
         });
     }
 
