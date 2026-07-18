@@ -56,15 +56,43 @@ class PublicGamesTest extends TestCase
         $lobby = Game::create(['code' => 'OPEN1234', 'owner_id' => $lobbyHost->id, 'started' => false]);
         $started = Game::create(['code' => 'PLAY1234', 'owner_id' => $startedHost->id, 'started' => true]);
         $finished = Game::create(['code' => 'DONE1234', 'owner_id' => $startedHost->id, 'started' => true, 'winner_id' => $startedHost->id]);
+        $replay = Game::create(['code' => 'AGAIN123', 'owner_id' => $startedHost->id, 'started' => true, 'winner_id' => $startedHost->id]);
         $lobby->members()->attach($lobbyHost);
         $started->members()->attach($startedHost);
-        $finished->members()->attach($startedHost);
+        $finished->members()->attach($startedHost, ['in_lobby' => false]);
+        $replay->members()->attach($startedHost, ['in_lobby' => true]);
 
         $this->getJson('/api/games')
             ->assertOk()
-            ->assertJsonCount(2, 'data')
+            ->assertJsonCount(3, 'data')
             ->assertJsonFragment(['code' => 'OPEN1234', 'started' => false])
             ->assertJsonFragment(['code' => 'PLAY1234', 'started' => true])
+            ->assertJsonFragment(['code' => 'AGAIN123', 'winner_id' => $startedHost->id])
             ->assertJsonMissing(['code' => 'DONE1234']);
+    }
+
+    public function test_new_player_can_join_replay_lobby_but_not_active_game(): void
+    {
+        $host = User::factory()->create(['color' => 'yellow']);
+        $active = Game::create(['code' => 'ACTIVE12', 'owner_id' => $host->id, 'started' => true]);
+        $active->members()->attach($host, ['in_lobby' => false]);
+
+        $this->postJson('/api/games/code/ACTIVE12/join', ['name' => 'Blocked'])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Game already started.');
+
+        $replay = Game::create(['code' => 'REPLAY12', 'owner_id' => $host->id, 'started' => true, 'winner_id' => $host->id]);
+        $replay->members()->attach($host, ['in_lobby' => true]);
+
+        $joined = $this->postJson('/api/games/code/REPLAY12/join', ['name' => 'New player', 'color' => 'blue'])
+            ->assertCreated()
+            ->assertJsonPath('game.started', true)
+            ->assertJsonPath('game.winner_id', $host->id);
+
+        $this->assertDatabaseHas('members', [
+            'game_id' => $replay->id,
+            'user_id' => $joined->json('user.id'),
+            'in_lobby' => true,
+        ]);
     }
 }

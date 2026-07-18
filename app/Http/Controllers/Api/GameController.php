@@ -265,9 +265,17 @@ class GameController extends Controller
             ->with('members')
             ->latest()
             ->get()
-            ->filter(fn (Game $game) => $game->started
-                ? $game->winner_id === null
-                : $game->members->count() < config('game.max_players'))
+            ->filter(function (Game $game) {
+                if (! $game->started) {
+                    return $game->members->count() < config('game.max_players');
+                }
+                if ($game->winner_id === null) {
+                    return true;
+                }
+
+                return $game->members->count() < config('game.max_players')
+                    && $game->members->contains(fn (User $member) => (bool) $member->pivot->in_lobby);
+            })
             ->values();
 
         return GameResource::collection(
@@ -517,7 +525,10 @@ class GameController extends Controller
             return DB::transaction(function () use ($data, $code) {
                 $game = Game::where('code', strtoupper($code))->lockForUpdate()->firstOrFail();
                 $this->ensurePlayable($game);
-                abort_if($game->started, 422, 'Game already started.');
+                $isReplayLobby = $game->started
+                    && $game->winner_id !== null
+                    && DB::table('members')->where('game_id', $game->id)->where('in_lobby', true)->exists();
+                abort_if($game->started && ! $isReplayLobby, 422, 'Game already started.');
                 abort_if($game->members()->count() >= config('game.max_players'), 422, 'No more available seats in this room.');
                 if (($data['client'] ?? null) === 'native' && ! $this->transportAllocator->canJoinWithoutReallocation($game)) {
                     return response()->json([
@@ -534,7 +545,7 @@ class GameController extends Controller
                 $requested = $data['color'] ?? self::COLORS[0];
                 $data['color'] = in_array($requested, $used, true) ? collect(self::COLORS)->first(fn ($color) => ! in_array($color, $used, true)) : $requested;
                 $user = User::create($data);
-                $game->members()->attach($user);
+                $game->members()->attach($user, ['in_lobby' => true]);
                 $this->broadcastGameUpdated($game, 'member.joined');
 
                 return response()->json(['game' => $this->full($game), 'user' => new UserResource($user), 'color_changed' => $requested !== $data['color']], 201);
