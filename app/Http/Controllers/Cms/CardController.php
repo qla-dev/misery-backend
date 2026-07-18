@@ -90,6 +90,52 @@ class CardController extends Controller
         return view('cms.cards.index', compact('assets', 'cards', 'stacks'));
     }
 
+    public function gallery()
+    {
+        $assets = $this->artworkAssets();
+        $cards = Card::query()
+            ->with('stack')
+            ->orderBy('title')
+            ->get()
+            ->map(function (Card $card): array {
+                return [
+                    'id' => $card->id,
+                    'title' => $card->title,
+                    'title_bs' => $card->title_bs,
+                    'score' => number_format((float) $card->score, 2, '.', ''),
+                    'stack' => $card->stack?->name ?? $card->deck,
+                    'image' => $this->cardImageUrl($card->image),
+                    'assign_url' => route('cms.cards.assign-artwork', $card),
+                ];
+            });
+
+        return view('cms.gallery.index', compact('assets', 'cards'));
+    }
+
+    private function artworkAssets()
+    {
+        return collect([
+            ...Storage::disk('public')->allFiles('cards'),
+            ...Storage::disk('public')->allFiles('generated'),
+        ])
+            ->unique()
+            ->filter(fn (string $path) => in_array(Str::lower(pathinfo($path, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'webp', 'png', 'gif', 'avif'], true))
+            ->map(function (string $path): array {
+                $extension = Str::lower(pathinfo($path, PATHINFO_EXTENSION));
+
+                return [
+                    'path' => $path,
+                    'url' => url('/card-images/'.$path),
+                    'folder' => dirname($path),
+                    'filename' => basename($path),
+                    'format' => in_array($extension, ['jpg', 'jpeg'], true) ? 'jpg' : ($extension === 'webp' ? 'webp' : 'other'),
+                    'cards' => Card::query()->where('image', $path)->count(),
+                ];
+            })
+            ->sortBy(fn (array $asset) => $asset['folder'].'/'.$asset['filename'], SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+    }
+
     private function addArtworkMetadata(Card $card): void
     {
         $card->setAttribute('artwork_bytes', $this->artworkBytes($card->image));

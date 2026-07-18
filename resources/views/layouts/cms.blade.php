@@ -9,6 +9,7 @@
 <header><strong>MISERY INDEX CMS</strong><nav>
 <a href="{{ route('simulator') }}">Simulator</a><a class="{{ request()->routeIs('cms.home')?'active':'' }}" href="{{ route('cms.home') }}">Home</a>
 <a class="{{ request()->routeIs('cms.cards.*')?'active':'' }}" href="{{ route('cms.cards.index') }}">Cards</a>
+<a class="{{ request()->routeIs('cms.gallery.*')?'active':'' }}" href="{{ route('cms.gallery.index') }}">Gallery</a>
 <a class="{{ request()->routeIs('cms.generator.*')?'active':'' }}" href="{{ route('cms.generator.index') }}">Generator</a>
 <a class="{{ request()->routeIs('cms.screenshots.*')?'active':'' }}" href="{{ route('cms.screenshots.index') }}">Screenshot Maker</a>
 <a class="{{ request()->routeIs('cms.content.*')?'active':'' }}" href="{{ route('cms.content.index') }}">Content</a>
