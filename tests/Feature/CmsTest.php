@@ -368,11 +368,32 @@ class CmsTest extends TestCase
                 && str_contains($prompt, 'ijekavian standard')
                 && str_contains($prompt, 'č, ć, dž and đ')
                 && str_contains($prompt, 'grammar, cases, gender, number, agreement')
-                && str_contains($prompt, 'grammatical head is in the nominative case')
-                && str_contains($prompt, 'Bosnian verbal noun (glagolska imenica)')
-                && str_contains($prompt, 'Slanje privatne fotografije u porodičnu grupu')
-                && str_contains($prompt, 'never "Pošalji privatnu fotografiju porodičnoj grupi"');
+                && str_contains($prompt, 'natural, complete event sentence with a finite verb')
+                && str_contains($prompt, 'Lavina je blokirala jedinu cestu')
+                && str_contains($prompt, 'Vaš pas je uništio svadbenu tortu')
+                && str_contains($prompt, 'Protupožarne prskalice su uništile izložbu umjetnina')
+                && str_contains($prompt, 'never use the description translation as title_bs')
+                && str_contains($prompt, 'affricates č, ć, dž and đ must be written correctly')
+                && str_contains($prompt, 'never use passive "od strane" wording');
         });
+    }
+
+    public function test_card_model_removes_terminal_periods_from_english_subtitles(): void
+    {
+        $stack = Stack::where('slug', 'normal')->firstOrFail();
+        $card = Card::create([
+            'title' => 'Terminal punctuation',
+            'subtitle' => 'This subtitle ends with periods...',
+            'score' => 10,
+            'deck' => 'normal',
+            'stack_id' => $stack->id,
+        ]);
+
+        $this->assertSame('This subtitle ends with periods', $card->subtitle);
+        $this->assertDatabaseHas('cards', [
+            'id' => $card->id,
+            'subtitle' => 'This subtitle ends with periods',
+        ]);
     }
 
     public function test_generate_action_saves_black_background_webp_path_on_card(): void

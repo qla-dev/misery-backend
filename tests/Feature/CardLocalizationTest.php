@@ -46,7 +46,7 @@ class CardLocalizationTest extends TestCase
             ->assertJsonPath('data.current_card.title_bs', 'Probušena guma')
             ->assertJsonPath('data.hands.'.$player->id.'.0.title', 'Flat tire')
             ->assertJsonPath('data.hands.'.$player->id.'.0.title_bs', 'Probušena guma')
-            ->assertJsonPath('data.hands.'.$player->id.'.0.subtitle', 'Rain starts falling.')
+            ->assertJsonPath('data.hands.'.$player->id.'.0.subtitle', 'Rain starts falling')
             ->assertJsonPath('data.hands.'.$player->id.'.0.subtitle_bs', 'Počinje padati kiša.');
     }
 }

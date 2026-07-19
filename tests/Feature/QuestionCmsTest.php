@@ -108,6 +108,9 @@ class QuestionCmsTest extends TestCase
         $this->assertSame(6, Card::whereIn('title', $titles)->where('status', false)->count());
         $this->assertSame(6, Card::whereIn('title', $titles)->where('stack_id', $selectedStack->id)->where('deck', 'spicy')->count());
         $this->assertSame(6, Card::whereIn('title', $titles)->whereNotNull('title_bs')->whereNotNull('subtitle_bs')->count());
+        $this->assertTrue(Card::whereIn('title', $titles)->pluck('subtitle')->every(
+            fn (?string $subtitle) => $subtitle !== null && ! str_ends_with($subtitle, '.')
+        ));
 
         Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite:generateContent'
             && $request->hasHeader('x-goog-api-key', 'gemini-test-key')
@@ -116,8 +119,12 @@ class QuestionCmsTest extends TestCase
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Target deck: Spicy')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), '"minItems":6')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), '"title_bs"')
-            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'nominative verbal noun (glagolska imenica)')
-            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Slanje privatne fotografije u porodičnu grupu')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'natural, complete event sentence with an explicit subject and finite verb')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Lavina je blokirala jedinu cestu')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Vaš pas je uništio svadbenu tortu')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Protupožarne prskalice su uništile izložbu umjetnina')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'Correct Bosnian affricates č, ć, dž and đ')
+            && str_contains(data_get($request, 'contents.0.parts.0.text'), 'no period at the end')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'misery score')
             && str_contains(data_get($request, 'contents.0.parts.0.text'), 'description'));
     }

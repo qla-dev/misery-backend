@@ -189,8 +189,10 @@ class CardGeneratorController extends Controller
             'Every card needs concise English and Bosnian titles, one sentence of concrete context in both languages, and a carefully judged misery score with exactly two decimal places.',
             'Score relative to the supplied existing deck: trivial inconvenience is near 0, life-altering catastrophe is near 100.',
             'Avoid trivia questions, answers, fantasy, death, graphic injury, duplicate concepts, vague wording, and alternate wording of an existing card.',
-            'Write standard contemporary Bosnian in the ijekavian standard, never Croatian or Serbian wording. Use č, ć, dž, đ, š and ž correctly.',
-            'The Bosnian title must be a concise nominal phrase headed by a nominative verbal noun (glagolska imenica), never an imperative command or an infinitive.',
+            'Write standard contemporary Bosnian in the ijekavian standard, never Croatian or Serbian wording. Correct Bosnian affricates č, ć, dž and đ and the letters š and ž are mandatory; never use ASCII approximations such as c, dj, dz, s or z in their place.',
+            'The Bosnian title must be a natural, complete event sentence with an explicit subject and finite verb, normally in the active voice. Never nominalize the action with a verbal noun ending in -nje and never use passive "od strane" wording.',
+            'Mandatory examples: "An Avalanche Blocks the Only Road" becomes "Lavina je blokirala jedinu cestu"; "Your Dog Destroys the Wedding Cake" becomes "Vaš pas je uništio svadbenu tortu".',
+            'Keep title and description translations separate. Example title: "Fire Sprinklers Destroy an Art Exhibition" becomes "Protupožarne prskalice su uništile izložbu umjetnina".',
         ]);
     }
 
@@ -209,9 +211,9 @@ class CardGeneratorController extends Controller
             'Target deck: '.$selection['stack_name'].'. Make every situation suitable for this deck while still following the selected theme and severity.',
             'Theme: '.self::THEMES[$selection['theme']],
             "Requested severity: {$severityLabel}; every score must be between {$minimum} and {$maximum}.",
-            'Use natural English. Title: 4–12 words. Description: one vivid sentence under 180 characters.',
+            'Use natural English. Title: 4–12 words. Description: one vivid sentence under 180 characters with no period at the end.',
             'Also provide a natural Bosnian title and description with exactly the same meaning and details as the English copy.',
-            'Bosnian title example: "Send a Private Photo to the Family Group" becomes "Slanje privatne fotografije u porodičnu grupu", never "Pošalji privatnu fotografiju porodičnoj grupi".',
+            'For a second-person English title with an implied "you", write a Bosnian declarative event sentence such as "Poslali ste privatnu fotografiju u porodičnu grupu", not an imperative and not a nominal phrase.',
             'Give every score exactly two decimal places and judge it against the existing deck examples below.',
             'Make candidates meaningfully different from each other and from all existing cards.',
             '',
