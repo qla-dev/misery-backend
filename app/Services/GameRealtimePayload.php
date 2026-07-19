@@ -30,8 +30,12 @@ class GameRealtimePayload
         $events = $afterEventId === null
             ? $eventQuery->latest('id')->limit(self::MAX_EVENT_COUNT)->get()->sortBy('id')->values()
             : $eventQuery->where('id', '>', $afterEventId)->oldest('id')->limit(200)->get()->values();
+        $eventsWithCards = $events->where('type', 'MOVE_RESULT');
+        if ($afterEventId === null) {
+            $eventsWithCards = $eventsWithCards->take(-1);
+        }
         $eventCards = Card::query()
-            ->whereIn('id', $events->pluck('payload')->map(fn ($payload) => $payload['card_id'] ?? null)->filter()->unique())
+            ->whereIn('id', $eventsWithCards->pluck('payload')->map(fn ($payload) => $payload['card_id'] ?? null)->filter()->unique())
             ->get()
             ->keyBy('id');
         $handCardIds = DB::table('game_cards')
@@ -91,11 +95,14 @@ class GameRealtimePayload
                 'lobby_member_ids' => $lobbyMemberIds,
                 'hand_card_ids' => $handCardIds->all(),
             ],
-            'events' => $events->map(function ($event) use ($eventCards) {
+            'events' => $events->map(function ($event) use ($eventCards, $afterEventId) {
                 $payload = $event->payload ?? [];
+                if ($afterEventId === null) {
+                    unset($payload['player_name']);
+                }
                 $cardId = $payload['card_id'] ?? null;
-                if ($cardId && $eventCards->has($cardId)) {
-                    $payload['card'] = $this->card($eventCards->get($cardId));
+                if ($event->type === 'MOVE_RESULT' && $cardId && $eventCards->has($cardId)) {
+                    $payload['card'] = $this->card($eventCards->get($cardId), false);
                 }
 
                 return [
@@ -120,7 +127,7 @@ class GameRealtimePayload
         ];
     }
 
-    private function card(Card $card): array
+    private function card(Card $card, bool $includeSubtitle = true): array
     {
         $image = $card->image && $card->image !== '0' ? $card->image : null;
         if ($image && ! str_starts_with($image, 'http://') && ! str_starts_with($image, 'https://')) {
@@ -131,8 +138,8 @@ class GameRealtimePayload
             'id' => (int) $card->id,
             'title' => $card->title,
             'title_bs' => $card->title_bs,
-            'subtitle' => $card->subtitle,
-            'subtitle_bs' => $card->subtitle_bs,
+            'subtitle' => $includeSubtitle ? $card->subtitle : null,
+            'subtitle_bs' => $includeSubtitle ? $card->subtitle_bs : null,
             'score' => (float) $card->score,
             'image' => $image,
             'deck' => $card->deck,
