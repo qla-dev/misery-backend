@@ -56,7 +56,7 @@ class GameSyncTransportTest extends TestCase
         );
     }
 
-    public function test_pusher_heartbeat_updates_presence_without_returning_a_full_snapshot(): void
+    public function test_pusher_heartbeat_updates_presence_and_returns_recovery_payload(): void
     {
         $host = User::factory()->create();
         $game = Game::create(['code' => 'SYNC1003', 'owner_id' => $host->id, 'sync_driver' => 'pusher']);
@@ -67,7 +67,11 @@ class GameSyncTransportTest extends TestCase
             ->value('updated_at');
 
         $this->postJson("/api/games/{$game->id}/heartbeat", ['user_id' => $host->id])
-            ->assertNoContent();
+            ->assertOk()
+            ->assertJsonPath('version', 1)
+            ->assertJsonPath('game_id', $game->id)
+            ->assertJsonPath('reason', 'heartbeat')
+            ->assertJsonPath('state.id', $game->id);
 
         $after = $game->members()->newPivotStatement()
             ->where('game_id', $game->id)
@@ -279,7 +283,7 @@ class GameSyncTransportTest extends TestCase
         $allocator = \Mockery::mock(RealtimeTransportAllocator::class);
         $allocator->shouldReceive('publishAblyGameUpdate')
             ->once()
-            ->with($game->id, 'host.presence');
+            ->with($game->id, 'host.presence', \Mockery::type('array'));
         $this->app->instance(RealtimeTransportAllocator::class, $allocator);
 
         $this->postJson("/api/games/{$game->id}/host-lobby-presence", [

@@ -17,6 +17,7 @@ use App\Models\Stack;
 use App\Models\User;
 use App\Services\RealtimeTransportAllocator;
 use App\Services\BotTurnScheduler;
+use App\Services\GameRealtimePayload;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -68,10 +69,11 @@ class GameController extends Controller
         DB::afterCommit(function () use ($gameId, $reason, $driver) {
             dispatch(function () use ($gameId, $reason, $driver) {
                 try {
+                    $payload = app(GameRealtimePayload::class)->build($gameId, $reason);
                     if ($driver === 'ably') {
-                        app(RealtimeTransportAllocator::class)->publishAblyGameUpdate($gameId, $reason);
+                        app(RealtimeTransportAllocator::class)->publishAblyGameUpdate($gameId, $reason, $payload);
                     } else {
-                        GameUpdated::dispatch($gameId, $reason, $driver);
+                        GameUpdated::dispatch($gameId, $reason, $driver, $payload);
                     }
                 } catch (\Throwable $error) {
                     Log::error('Realtime game update failed', [
@@ -376,7 +378,10 @@ class GameController extends Controller
 
     public function heartbeat(Request $request, Game $game)
     {
-        $data = $request->validate(['user_id' => 'required|integer']);
+        $data = $request->validate([
+            'user_id' => 'required|integer',
+            'after_event_id' => 'nullable|integer|min:0',
+        ]);
 
         abort_unless(
             DB::table('members')
@@ -393,7 +398,11 @@ class GameController extends Controller
             ->update(['updated_at' => now()]);
         $this->botTurnScheduler->schedule($game);
 
-        return response()->noContent();
+        return response()->json(app(GameRealtimePayload::class)->build(
+            (int) $game->id,
+            'heartbeat',
+            isset($data['after_event_id']) ? (int) $data['after_event_id'] : 0,
+        ));
     }
 
     public function realtimeToken(Request $request, Game $game)

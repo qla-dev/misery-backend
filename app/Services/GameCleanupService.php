@@ -190,11 +190,12 @@ class GameCleanupService
     private function broadcastDeletion(int $gameId, string $driver): void
     {
         $driver = config('game.reverb_override') ? 'reverb' : $driver;
+        $payload = app(GameRealtimePayload::class)->build($gameId, 'game.deleted');
         try {
             if ($driver === 'ably') {
-                $this->transportAllocator->publishAblyGameUpdate($gameId, 'game.deleted');
+                $this->transportAllocator->publishAblyGameUpdate($gameId, 'game.deleted', $payload);
             } elseif (in_array($driver, ['pusher', 'reverb'], true)) {
-                GameUpdated::dispatch($gameId, 'game.deleted', $driver);
+                GameUpdated::dispatch($gameId, 'game.deleted', $driver, $payload);
             }
         } catch (\Throwable $error) {
             Log::warning('Stale game deleted but realtime notification failed', [

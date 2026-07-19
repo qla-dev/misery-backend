@@ -119,13 +119,9 @@ class RealtimeTransportAllocator
         ]);
     }
 
-    public function publishAblyGameUpdate(int $gameId, string $reason): void
+    public function publishAblyGameUpdate(int $gameId, string $reason, array $payload): void
     {
-        $published = $this->ably()->channels->get("game.{$gameId}")->publish('game.updated', [
-            'game_id' => $gameId,
-            'reason' => $reason,
-            'sent_at' => now()->toISOString(),
-        ]);
+        $published = $this->ably()->channels->get("game.{$gameId}")->publish('game.updated', $payload);
 
         if ($published !== true) {
             throw new \RuntimeException("Ably did not confirm publishing game.updated for game {$gameId}.");
