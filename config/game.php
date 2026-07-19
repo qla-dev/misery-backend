@@ -26,8 +26,9 @@ return [
     'member_inactivity_timeout_seconds' => max(15, (int) env('MEMBER_INACTIVITY_TIMEOUT_SECONDS', 60)),
     'host_lobby_inactivity_timeout_seconds' => max(30, (int) env('HOST_LOBBY_INACTIVITY_TIMEOUT_SECONDS', 120)),
     'started_game_move_timeout_seconds' => max(60, (int) env('STARTED_GAME_MOVE_TIMEOUT_SECONDS', 180)),
-    'bot_turn_delay_min_ms' => max(0, (int) env('BOT_TURN_DELAY_MIN_MS', 650)),
-    'bot_turn_delay_max_ms' => max(0, (int) env('BOT_TURN_DELAY_MAX_MS', 1600)),
+    // Keep the drawn card visible long enough for a bot to appear to consider it.
+    'bot_turn_delay_min_ms' => max(0, (int) env('BOT_TURN_DELAY_MIN_MS', 3000)),
+    'bot_turn_delay_max_ms' => max(0, (int) env('BOT_TURN_DELAY_MAX_MS', 6000)),
     'auto_creation' => filter_var(env('AUTO_CREATION', false), FILTER_VALIDATE_BOOL),
     'minimum_public_room_listings' => max(0, (int) env('MINIMUM_PUBLIC_ROOM_LISTINGS', 10)),
     'synthetic_player_names' => [

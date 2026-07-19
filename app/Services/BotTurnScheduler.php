@@ -27,8 +27,8 @@ class BotTurnScheduler
         DB::afterCommit(function () use ($gameId, $pendingKey) {
             dispatch(function () use ($gameId, $pendingKey): void {
                 try {
-                    $minimum = (int) config('game.bot_turn_delay_min_ms', 650);
-                    $maximum = max($minimum, (int) config('game.bot_turn_delay_max_ms', 1600));
+                    $minimum = (int) config('game.bot_turn_delay_min_ms', 3000);
+                    $maximum = max($minimum, (int) config('game.bot_turn_delay_max_ms', 6000));
                     $delay = random_int($minimum, $maximum);
                     if ($delay > 0) {
                         usleep($delay * 1000);

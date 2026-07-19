@@ -149,8 +149,9 @@ The owner is never offered a steal of their own card.
 
 ## Autonomous CMS bots
 
-- The CMS `Add 7 bots` action is available only for an open, unterminated lobby containing exactly one human and no existing bots.
-- It adds seven real `members` with persistent `users.is_bot = true`, producing an 8/8 server room.
+- The CMS bot action is available only for an open, unterminated lobby containing exactly one human and no existing bots.
+- The operator chooses 1–7 bots. They become real `members` with persistent `users.is_bot = true` and unique random names from the public-room name list.
+- Each bot waits a configurable randomized thinking interval after its card becomes current before acting.
 - Server-room bots are controlled only by the backend queue; native, web and simulator clients must never submit moves for them.
 - A bot acts only while it is the authoritative `current_player_id`. A per-game lock prevents duplicate bot turns.
 - Bot decisions match chaos probabilities: pass 28% of steal offers; otherwise attempt a move that is correct 52% of the time.

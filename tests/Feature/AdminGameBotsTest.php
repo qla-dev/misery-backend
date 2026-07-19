@@ -15,23 +15,44 @@ class AdminGameBotsTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_can_add_seven_bots_only_to_an_open_single_player_lobby(): void
+    public function test_admin_can_choose_how_many_named_bots_to_add_to_an_open_single_player_lobby(): void
     {
         $host = User::factory()->create(['color' => 'yellow']);
         $game = Game::create(['code' => 'BOTS1234', 'owner_id' => $host->id, 'started' => false]);
         $game->members()->attach($host, ['in_lobby' => true]);
 
         $this->withoutMiddleware(CmsBasicAuth::class)
-            ->postJson(route('simulator.rooms.bots.store', $game))
-            ->assertOk();
+            ->postJson(route('simulator.rooms.bots.store', $game), ['count' => 3])
+            ->assertOk()
+            ->assertJsonPath('count', 3);
 
-        $this->assertSame(8, $game->members()->count());
-        $this->assertSame(7, $game->members()->where('is_bot', true)->count());
-        $this->assertSame(8, DB::table('members')->where('game_id', $game->id)->where('in_lobby', true)->count());
+        $bots = $game->members()->where('is_bot', true)->get();
+        $this->assertSame(4, $game->members()->count());
+        $this->assertCount(3, $bots);
+        $this->assertSame(3, $bots->pluck('name')->unique()->count());
+        $bots->each(fn (User $bot) => $this->assertContains($bot->name, config('game.synthetic_player_names')));
+        $this->assertSame(4, DB::table('members')->where('game_id', $game->id)->where('in_lobby', true)->count());
 
         $this->withoutMiddleware(CmsBasicAuth::class)
-            ->postJson(route('simulator.rooms.bots.store', $game))
+            ->postJson(route('simulator.rooms.bots.store', $game), ['count' => 1])
             ->assertStatus(422);
+    }
+
+    public function test_bot_count_must_fit_the_supported_room_size(): void
+    {
+        $host = User::factory()->create(['color' => 'yellow']);
+        $game = Game::create(['code' => 'BOTCOUNT', 'owner_id' => $host->id, 'started' => false]);
+        $game->members()->attach($host, ['in_lobby' => true]);
+
+        $this->withoutMiddleware(CmsBasicAuth::class)
+            ->postJson(route('simulator.rooms.bots.store', $game), ['count' => 0])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('count');
+
+        $this->withoutMiddleware(CmsBasicAuth::class)
+            ->postJson(route('simulator.rooms.bots.store', $game), ['count' => 8])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('count');
     }
 
     public function test_active_bot_plays_without_a_persistent_queue_worker(): void
