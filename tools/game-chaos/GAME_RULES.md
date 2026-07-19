@@ -108,6 +108,8 @@ The round does not end while another eligible player can attempt the steal.
 
 - `STEAL_OFFERED` starts the decision timeout immediately at the event's server timestamp.
 - The player must receive an explicit Accept/Pass choice.
+- Native and web clients follow the same gate: neither may enter steal-placement mode automatically.
+- On web, Correct/Wrong placement controls remain hidden until the targeted player explicitly chooses `Try to steal`; choosing `Pass` calls the pass endpoint immediately.
 - The card must not display `TAP TO FLIP TO TRY TO STEAL` before Accept.
 - Accept makes the same current card available to that stealer.
 - Pass calls `POST /api/games/{id}/pass-steal` and does not create a `MOVE_RESULT`.
@@ -151,7 +153,8 @@ The owner is never offered a steal of their own card.
 
 - The CMS bot action is available only for an open, unterminated lobby containing exactly one human and no existing bots.
 - The operator chooses 1–7 bots. They become real `members` with persistent `users.is_bot = true` and unique random names from the public-room name list.
-- Each bot waits a configurable randomized thinking interval after its card becomes current before acting.
+- Bot count is validated server-side and may not exceed the seven available seats in a one-human lobby.
+- Each bot waits a configurable randomized thinking interval after its card becomes current before acting; the default is 3–6 seconds.
 - Server-room bots are controlled only by the backend queue; native, web and simulator clients must never submit moves for them.
 - A bot acts only while it is the authoritative `current_player_id`. A per-game lock prevents duplicate bot turns.
 - Bot decisions match chaos probabilities: pass 28% of steal offers; otherwise attempt a move that is correct 52% of the time.
@@ -197,6 +200,16 @@ server-event.consume
 server-event.complete
 server-event.consume
 ```
+
+For the client that submitted a move, the committed event stream in the move response is authoritative for presentation and is ingested immediately. A wrong normal move must queue `MOVE_RESULT` and targeted `TURN_HOLD` from that response; the owner must not wait for a later poll, realtime refresh, or another player's Accept action before seeing `YOU'RE ON HOLD`.
+
+## Face-up drawn card
+
+- The title and subtitle share one header parent.
+- Header top padding, title/subtitle gap, and header bottom padding are all exactly 10 px.
+- Do not add an independent top margin that makes the visible top and bottom spacing unequal.
+- The Bebas title keeps native font padding and 8 px of extra line height so `Č`, `Ć`, `Đ`, `Š`, and `Ž` remain intact.
+- The artwork has no explicit `width: 100%`; it uses `minHeight: 100%` and stretches full-bleed to the left and right edges of the face-up card.
 
 ## Card footer and interaction
 
@@ -309,6 +322,8 @@ The action's JSONL entry must include a `native_countdown` object containing cou
 - Every `MOVE_RESULT.move_id` exists once.
 - A correct move is never followed by `STEAL_OFFERED` for that card.
 - A wrong normal move with eligible players is followed by `TURN_HOLD` and `STEAL_OFFERED`.
+- The wrong owner receives `MOVE_RESULT` then `TURN_HOLD` in the same move response, before any stealer action.
+- Every simulated web steal turn records an explicit Accept/Pass decision; placement is never available before Accept.
 - A successful steal changes card ownership to the stealer.
 - A finished game has exactly one winner and no further actionable events.
 - No simulated client has a queued event with no current presentation while otherwise idle.

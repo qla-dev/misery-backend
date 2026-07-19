@@ -28,6 +28,26 @@ const LANE_CARD_LAYOUT = {
   },
   surfaces: ['local-lane', 'other-player-lane-modal'],
 };
+const DRAWN_CARD_FACE_LAYOUT = {
+  surface: 'face-up-drawn-card',
+  header: {
+    shared_parent: true,
+    vertical_padding: 10,
+    title_subtitle_gap: 10,
+    equal_outer_and_inner_spacing: true,
+  },
+  title: {
+    font: 'BebasNeue_400Regular',
+    latin_ext_font_padding: true,
+    extra_line_height: 8,
+    preserves_bosnian_diacritics: ['Č', 'Ć', 'Đ', 'Š', 'Ž'],
+  },
+  artwork: {
+    explicit_width: null,
+    min_height: '100%',
+    full_bleed_left_right: true,
+  },
+};
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const LOG_DIR = path.join(ROOT, 'storage', 'logs', 'game-chaos');
 
@@ -169,6 +189,8 @@ const REQUIRED_NATIVE_SCENARIOS = [
   'pc-correct-before-native-countdown-completes',
   'countdown-gate.force-release-after-6500ms',
   'queued-move-result.consume-before-turn-started',
+  'wrong-owner-response.consume-move-result-before-turn-hold',
+  'web-steal-offer.requires-explicit-accept-or-pass',
 ];
 
 function assertMovePresentation(action, correct, before, newEvents) {
@@ -183,6 +205,30 @@ function assertMovePresentation(action, correct, before, newEvents) {
   if (Boolean(payload.correct) !== correct) failures.push('local result differs from authoritative MOVE_RESULT');
   if (Boolean(payload.is_steal) !== Boolean(before.is_steal_turn)) failures.push('MOVE_RESULT steal flag differs from input state');
   return failures;
+}
+
+function assertImmediateOwnerHold(action, correct, before, after, newEvents, actorId) {
+  if (action !== 'move' || correct || before.is_steal_turn || !after.is_steal_turn) return [];
+  const relevant = newEvents.filter((event) =>
+    event.target_user_id === null || Number(event.target_user_id) === Number(actorId)
+  );
+  const types = relevant.map((event) => event.type);
+  if (JSON.stringify(types) !== JSON.stringify(['MOVE_RESULT', 'TURN_HOLD'])) {
+    return [`wrong owner response expected immediate MOVE_RESULT>TURN_HOLD, received ${types.join('>')}`];
+  }
+  return [];
+}
+
+function webStealDecision(before, action) {
+  if (!before.is_steal_turn) return null;
+  return {
+    offer_presented_before_placement: true,
+    choices: ['accept', 'pass'],
+    choice: action === 'pass' ? 'pass' : 'accept',
+    placement_controls_visible_before_accept: false,
+    placement_controls_visible_after_accept: action === 'move',
+    auto_entered_steal_placement: false,
+  };
 }
 
 function assertNativeCountdownRecovery(newEvents, nativeUserId) {
@@ -243,6 +289,8 @@ async function runGame({ baseUrl, seed, playerCount, maxActions, targetScore, ba
   let logFile = null;
   let lastEventId = 0;
   let gameplayActionCount = 0;
+  let verifiedImmediateOwnerHold = false;
+  let verifiedWebStealOffer = false;
   const players = [];
 
   const writeLog = async (entry) => {
@@ -291,10 +339,15 @@ async function runGame({ baseUrl, seed, playerCount, maxActions, targetScore, ba
       // Every game begins with the production regression that previously froze
       // native: the first PC move succeeds while another client is counting down.
       const isNativeCountdownRegression = gameplayActionCount === 1;
-      const action = isNativeCountdownRegression
+      // The second action is deliberately wrong so every run verifies that the
+      // owner receives TURN_HOLD before the offered player makes any decision.
+      const isImmediateHoldRegression = gameplayActionCount === 2 && !game.is_steal_turn;
+      const action = isNativeCountdownRegression || isImmediateHoldRegression
         ? 'move'
         : game.is_steal_turn && random() < 0.28 ? 'pass' : 'move';
-      const correct = action === 'move' ? (isNativeCountdownRegression || random() < 0.52) : null;
+      const correct = action === 'move'
+        ? isNativeCountdownRegression || (!isImmediateHoldRegression && random() < 0.52)
+        : null;
       const response = action === 'pass'
         ? await request(baseUrl, `/games/${game.id}/pass-steal`, { method: 'POST', body: { player_id: actorId } })
         : await request(baseUrl, `/games/${game.id}/moves`, { method: 'POST', body: { player_id: actorId, correct } });
@@ -305,6 +358,10 @@ async function runGame({ baseUrl, seed, playerCount, maxActions, targetScore, ba
       const actual = newEvents.map((event) => event.type);
       const failures = assertState(game, memberIds);
       failures.push(...assertMovePresentation(action, correct, before, newEvents));
+      const immediateHoldFailures = assertImmediateOwnerHold(action, correct, before, serverState(game), newEvents, actorId);
+      failures.push(...immediateHoldFailures);
+      if (isImmediateHoldRegression && immediateHoldFailures.length === 0) verifiedImmediateOwnerHold = true;
+      if (before.is_steal_turn && webStealDecision(before, action)) verifiedWebStealOffer = true;
       const nativeCountdown = isNativeCountdownRegression
         ? assertNativeCountdownRecovery(newEvents, game.current_player_id)
         : null;
@@ -321,6 +378,8 @@ async function runGame({ baseUrl, seed, playerCount, maxActions, targetScore, ba
         new_events: newEvents,
         presentation: expectedPresentation(action, correct),
         lane_card_layout: LANE_CARD_LAYOUT,
+        drawn_card_face_layout: DRAWN_CARD_FACE_LAYOUT,
+        web_steal_decision: webStealDecision(before, action),
         native_countdown: nativeCountdown,
         invariants: failures,
         result: failures.length ? 'failure' : 'ok',
@@ -329,6 +388,8 @@ async function runGame({ baseUrl, seed, playerCount, maxActions, targetScore, ba
     }
 
     if (!game.winner_id) throw new Error(`Game did not finish within ${maxActions} actions.`);
+    if (!verifiedImmediateOwnerHold) throw new Error('Run never verified immediate MOVE_RESULT>TURN_HOLD delivery to the wrong owner.');
+    if (!verifiedWebStealOffer) throw new Error('Run never verified the explicit web Accept/Pass steal gate.');
     await writeLog({
       action: 'finished',
       expected_navigation: '/game',
