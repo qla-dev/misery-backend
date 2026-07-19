@@ -2,15 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Http\Controllers\Api\GameController;
-use App\Jobs\PlayAutomatedBotTurn;
 use App\Http\Middleware\CmsBasicAuth;
 use App\Models\Card;
 use App\Models\Game;
 use App\Models\User;
+use App\Services\BotTurnScheduler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class AdminGameBotsTest extends TestCase
@@ -36,9 +34,13 @@ class AdminGameBotsTest extends TestCase
             ->assertStatus(422);
     }
 
-    public function test_backend_job_plays_the_active_bot_through_the_real_move_controller(): void
+    public function test_active_bot_plays_without_a_persistent_queue_worker(): void
     {
-        Queue::fake();
+        config([
+            'queue.default' => 'database',
+            'game.bot_turn_delay_min_ms' => 0,
+            'game.bot_turn_delay_max_ms' => 0,
+        ]);
         $bot = User::factory()->create(['name' => 'BOT 1', 'is_bot' => true, 'color' => 'blue']);
         $human = User::factory()->create(['color' => 'yellow']);
         $current = Card::create(['title' => 'Current', 'score' => 10]);
@@ -61,9 +63,12 @@ class AdminGameBotsTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        (new PlayAutomatedBotTurn($game->id))->handle(app(GameController::class));
+        app(BotTurnScheduler::class)->schedule($game);
+        $this->assertDatabaseCount('jobs', 0);
+
+        $this->app->terminate();
 
         $this->assertDatabaseHas('moves', ['game_id' => $game->id, 'player_id' => $bot->id]);
-        Queue::assertPushed(PlayAutomatedBotTurn::class);
+        $this->assertDatabaseCount('jobs', 0);
     }
 }

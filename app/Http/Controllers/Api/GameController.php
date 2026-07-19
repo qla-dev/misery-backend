@@ -362,12 +362,15 @@ class GameController extends Controller
         if (isset($data['user_id'])) {
             $game = $this->refreshPresence($game, (int) $data['user_id']);
         }
+        $this->botTurnScheduler->schedule($game);
 
         return $this->full($game);
     }
 
     public function snapshot(Game $game)
     {
+        $this->botTurnScheduler->schedule($game);
+
         return $this->full($game);
     }
 
@@ -388,6 +391,7 @@ class GameController extends Controller
             ->where('game_id', $game->id)
             ->where('user_id', $data['user_id'])
             ->update(['updated_at' => now()]);
+        $this->botTurnScheduler->schedule($game);
 
         return response()->noContent();
     }
