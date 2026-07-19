@@ -6,9 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Game extends Model
 {
-    protected $fillable = ['code', 'owner_id', 'started', 'host_in_lobby', 'is_private', 'terminated_at', 'termination_reason', 'current_card_id', 'stack_id', 'target_score', 'current_player_id', 'turn_owner_id', 'winner_id', 'is_steal_turn', 'sync_driver'];
+    protected $fillable = ['code', 'owner_id', 'started', 'host_in_lobby', 'is_private', 'is_synthetic', 'synthetic_host_name', 'synthetic_player_count', 'terminated_at', 'termination_reason', 'current_card_id', 'stack_id', 'target_score', 'current_player_id', 'turn_owner_id', 'winner_id', 'is_steal_turn', 'sync_driver'];
 
-    protected $casts = ['started' => 'boolean', 'host_in_lobby' => 'boolean', 'is_private' => 'boolean', 'terminated_at' => 'datetime', 'is_steal_turn' => 'boolean', 'target_score' => 'integer'];
+    protected $casts = ['started' => 'boolean', 'host_in_lobby' => 'boolean', 'is_private' => 'boolean', 'is_synthetic' => 'boolean', 'synthetic_player_count' => 'integer', 'terminated_at' => 'datetime', 'is_steal_turn' => 'boolean', 'target_score' => 'integer'];
 
     public function owner()
     {

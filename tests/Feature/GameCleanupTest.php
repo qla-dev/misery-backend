@@ -14,11 +14,22 @@ class GameCleanupTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_cleanup_does_not_create_synthetic_rooms_when_auto_creation_is_disabled(): void
+    {
+        config(['game.auto_creation' => false]);
+
+        $result = app(GameCleanupService::class)->cleanup();
+
+        $this->assertSame(0, $result['synthetic_games_created']);
+        $this->assertSame(0, Game::query()->where('is_synthetic', true)->count());
+    }
+
     public function test_cleanup_deletes_only_orphaned_lobbies_and_started_games_without_recent_moves(): void
     {
         config([
             'game.host_lobby_inactivity_timeout_seconds' => 120,
             'game.started_game_move_timeout_seconds' => 180,
+            'game.auto_creation' => true,
         ]);
 
         $staleLobby = $this->game('OLDL1001', false);
@@ -53,6 +64,9 @@ class GameCleanupTest extends TestCase
 
         $this->assertSame(1, $result['lobby_games_deleted']);
         $this->assertSame(3, $result['started_games_deleted']);
+        $this->assertSame(7, $result['synthetic_games_created']);
+        $this->assertSame(0, $result['synthetic_games_deleted']);
+        $this->assertSame(10, $result['active_public_listings']);
         $this->assertDatabaseMissing('games', ['id' => $staleLobby->id]);
         $this->assertDatabaseMissing('games', ['id' => $staleStarted->id]);
         $this->assertDatabaseMissing('games', ['id' => $startedWithOldMove->id]);
@@ -61,6 +75,27 @@ class GameCleanupTest extends TestCase
         $this->assertDatabaseHas('games', ['id' => $recentlyStarted->id]);
         $this->assertDatabaseHas('games', ['id' => $startedWithRecentMove->id]);
         $this->assertDatabaseHas('members', ['game_id' => $activeLobby->id, 'user_id' => $guest->id]);
+        $this->assertSame(7, Game::query()->where('is_synthetic', true)->count());
+        $this->assertSame(0, DB::table('members')->whereIn('game_id', Game::query()->where('is_synthetic', true)->pluck('id'))->count());
+        $synthetic = Game::query()->where('is_synthetic', true)->firstOrFail();
+        $this->getJson('/api/games')->assertOk();
+        $serialized = collect($this->getJson('/api/games')->json('data'))->firstWhere('id', $synthetic->id);
+        $this->assertTrue($serialized['started']);
+        $this->assertTrue($serialized['is_synthetic']);
+        $this->assertContains($serialized['synthetic_host_name'], config('game.synthetic_player_names'));
+        $this->assertSame('polling', $serialized['sync_driver']);
+        $this->assertNull($serialized['pusher']);
+        $this->assertNull($serialized['ably']);
+        $this->assertCount($synthetic->synthetic_player_count, $serialized['members']);
+
+        $synthetic->update(['synthetic_player_count' => 0]);
+        $zeroMemberListing = collect($this->getJson('/api/games')->assertOk()->json('data'))->firstWhere('id', $synthetic->id);
+        $this->assertCount(0, $zeroMemberListing['members']);
+
+        $second = app(GameCleanupService::class)->cleanup();
+        $this->assertSame(0, $second['synthetic_games_created']);
+        $this->assertSame(0, $second['synthetic_games_deleted']);
+        $this->assertSame(10, $second['active_public_listings']);
     }
 
     private function game(string $code, bool $started): Game

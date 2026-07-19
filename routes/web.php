@@ -5,6 +5,7 @@ use App\Http\Controllers\Cms\CardGeneratorController as CmsCardGeneratorControll
 use App\Http\Controllers\Cms\ContentGeneratorController as CmsContentGeneratorController;
 use App\Http\Controllers\Cms\ScreenshotMakerController as CmsScreenshotMakerController;
 use App\Http\Controllers\Cms\StackController as CmsStackController;
+use App\Http\Controllers\Cms\GameBotController as CmsGameBotController;
 use App\Http\Resources\GameResource;
 use App\Models\Game;
 use App\Models\Stack;
@@ -109,6 +110,9 @@ Route::delete('/simulator/rooms/{game}', function (Game $game, GameCleanupServic
 
     return response()->noContent();
 })->middleware('cms.auth')->name('simulator.rooms.destroy');
+Route::post('/simulator/rooms/{game}/bots', [CmsGameBotController::class, 'store'])
+    ->middleware('cms.auth')
+    ->name('simulator.rooms.bots.store');
 Route::get('/card-images/{path}', function (string $path) {
     abort_if(str_contains($path, '..') || ! str_starts_with($path, 'cards/'), 404);
     abort_unless(Storage::disk('public')->exists($path), 404);

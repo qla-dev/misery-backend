@@ -25,19 +25,24 @@ class CardController extends Controller
 
     public function index(Request $request)
     {
+        $normalStackId = Stack::query()->where('slug', 'normal')->value('id');
+        $selectedStackId = $request->has('stack')
+            ? ($request->filled('stack') ? $request->integer('stack') : null)
+            : $normalStackId;
+
         $cardQuery = Card::with('stack')->when($request->string('q')->toString(), function ($query, $search) {
             $query->where(fn ($q) => $q->where('title', 'like', "%{$search}%")->orWhere('subtitle', 'like', "%{$search}%"));
         })->when($request->filled('status'), fn ($query) => $query->where('status', $request->boolean('status')))
             ->when($request->filled('enhanced'), fn ($query) => $query->where('artwork_enhanced', $request->boolean('enhanced')))
-            ->when($request->filled('stack'), fn ($query) => $query->where('stack_id', $request->integer('stack')))
+            ->when($selectedStackId, fn ($query) => $query->where('stack_id', $selectedStackId))
             ->when($request->string('format')->toString() === 'webp', fn ($query) => $query->whereRaw('LOWER(image) LIKE ?', ['%.webp']))
             ->when($request->string('format')->toString() === 'jpg', fn ($query) => $query->where(function ($query) {
                 $query->whereRaw('LOWER(image) LIKE ?', ['%.jpg'])->orWhereRaw('LOWER(image) LIKE ?', ['%.jpeg']);
             }));
 
-        $sort = $request->string('sort')->toString();
+        $sort = $request->string('sort')->toString() ?: 'card_id';
+        $direction = $request->string('direction')->lower()->toString() === 'desc' ? 'desc' : 'asc';
         if (in_array($sort, ['artwork_weight', 'artwork_format'], true)) {
-            $direction = $request->string('direction')->lower()->toString() === 'desc' ? 'desc' : 'asc';
             $allCards = $cardQuery->get()->each(function (Card $card) {
                 $this->addArtworkMetadata($card);
             })->sortBy(
@@ -55,7 +60,6 @@ class CardController extends Controller
                 ['path' => $request->url(), 'query' => $request->query()]
             );
         } elseif (in_array($sort, ['card_id', 'score'], true)) {
-            $direction = $request->string('direction')->lower()->toString() === 'desc' ? 'desc' : 'asc';
             $cards = $cardQuery->orderBy($sort === 'card_id' ? 'id' : 'score', $direction)->paginate(25)->withQueryString();
             $cards->getCollection()->each(function (Card $card) {
                 $this->addArtworkMetadata($card);
@@ -87,7 +91,7 @@ class CardController extends Controller
             ->sortBy(fn (array $asset) => $asset['folder'].'/'.$asset['filename'], SORT_NATURAL | SORT_FLAG_CASE)
             ->values();
 
-        return view('cms.cards.index', compact('assets', 'cards', 'stacks'));
+        return view('cms.cards.index', compact('assets', 'cards', 'stacks', 'selectedStackId', 'sort', 'direction'));
     }
 
     public function gallery()

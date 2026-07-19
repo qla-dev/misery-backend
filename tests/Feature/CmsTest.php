@@ -76,6 +76,27 @@ class CmsTest extends TestCase
             ->assertSeeInOrder(['Small artwork', 'Large artwork']);
     }
 
+    public function test_cards_open_with_normal_pack_and_id_sort_by_default(): void
+    {
+        $normal = Stack::where('slug', 'normal')->firstOrFail();
+        $spicy = Stack::where('slug', 'spicy')->firstOrFail();
+        $first = Card::create(['title' => 'First normal card', 'score' => 90, 'deck' => 'normal', 'stack_id' => $normal->id]);
+        $second = Card::create(['title' => 'Second normal card', 'score' => 10, 'deck' => 'normal', 'stack_id' => $normal->id]);
+        Card::create(['title' => 'Hidden spicy card', 'score' => 5, 'deck' => 'spicy', 'stack_id' => $spicy->id]);
+        $server = ['PHP_AUTH_USER' => config('cms.username'), 'PHP_AUTH_PW' => config('cms.password')];
+
+        $this->withServerVariables($server)->get('/cms/cards')
+            ->assertOk()
+            ->assertSee('value="'.$normal->id.'" selected', false)
+            ->assertSee('>ID ↑</a>', false)
+            ->assertSeeInOrder(['data-card-id="'.$first->id.'"', 'data-card-id="'.$second->id.'"'], false)
+            ->assertDontSee('Hidden spicy card');
+
+        $this->withServerVariables($server)->get('/cms/cards?stack=')
+            ->assertOk()
+            ->assertSee('Hidden spicy card');
+    }
+
     public function test_deleting_a_card_preserves_the_filtered_list_url(): void
     {
         $stack = Stack::where('slug', 'normal')->firstOrFail();

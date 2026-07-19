@@ -16,6 +16,7 @@ use App\Models\Move;
 use App\Models\Stack;
 use App\Models\User;
 use App\Services\RealtimeTransportAllocator;
+use App\Services\BotTurnScheduler;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -26,7 +27,10 @@ class GameController extends Controller
 {
     private const COLORS = ['yellow', 'blue', 'emerald', 'purple', 'rose', 'orange', 'brown', 'silver'];
 
-    public function __construct(private readonly RealtimeTransportAllocator $transportAllocator) {}
+    public function __construct(
+        private readonly RealtimeTransportAllocator $transportAllocator,
+        private readonly BotTurnScheduler $botTurnScheduler,
+    ) {}
 
     private function full(Game $game): GameResource
     {
@@ -242,9 +246,11 @@ class GameController extends Controller
         $memberCutoff = now()->subSeconds(config('game.member_inactivity_timeout_seconds'));
 
         return DB::table('members')
-            ->where('game_id', $game->id)
-            ->where('updated_at', '<', $memberCutoff)
-            ->pluck('user_id')->map(fn ($id) => (int) $id);
+            ->join('users', 'users.id', '=', 'members.user_id')
+            ->where('members.game_id', $game->id)
+            ->where('users.is_bot', false)
+            ->where('members.updated_at', '<', $memberCutoff)
+            ->pluck('members.user_id')->map(fn ($id) => (int) $id);
     }
 
     private function ensurePlayable(Game $game): void
@@ -552,6 +558,7 @@ class GameController extends Controller
         return Cache::lock('realtime-transport-allocation', 15)->block(10, function () use ($data, $code) {
             return DB::transaction(function () use ($data, $code) {
                 $game = Game::where('code', strtoupper($code))->lockForUpdate()->firstOrFail();
+                abort_if($game->is_synthetic, 422, 'This showcase game is already in progress.');
                 $this->ensurePlayable($game);
                 $isReplayLobby = $game->started
                     && $game->winner_id !== null
@@ -677,6 +684,7 @@ class GameController extends Controller
                 ]);
             }
             $this->broadcastGameUpdated($game, 'game.started');
+            $this->botTurnScheduler->schedule($game);
 
             return $this->full($game);
         });
@@ -731,6 +739,11 @@ class GameController extends Controller
                 'turn_owner_id' => $turnOwnerId,
             ]);
             if ($game->winner_id) {
+                DB::table('members')
+                    ->join('users', 'users.id', '=', 'members.user_id')
+                    ->where('members.game_id', $game->id)
+                    ->where('users.is_bot', true)
+                    ->update(['members.in_lobby' => true, 'members.updated_at' => now()]);
                 $this->recordGameEvent($game, 'GAME_FINISHED', null, [
                     'winner_id' => (int) $game->winner_id,
                 ]);
@@ -756,6 +769,7 @@ class GameController extends Controller
                 ]);
             }
             $this->broadcastGameUpdated($game, 'move.created');
+            $this->botTurnScheduler->schedule($game);
 
             return response()->json(['move' => new MoveResource($move->load(['player', 'card'])), 'game' => $this->full($game)]);
         });
@@ -789,6 +803,7 @@ class GameController extends Controller
                 ]);
             }
             $this->broadcastGameUpdated($game, 'steal.passed');
+            $this->botTurnScheduler->schedule($game);
 
             return response()->json(['game' => $this->full($game)]);
         });

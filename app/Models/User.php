@@ -24,6 +24,7 @@ class User extends Authenticatable
         'google_id',
         'apple_id',
         'color',
+        'is_bot',
         'pro_status',
         'pro_started_at',
         'pro_ends_at',
@@ -48,6 +49,7 @@ class User extends Authenticatable
         return [
             'pro_started_at' => 'datetime',
             'pro_ends_at' => 'datetime',
+            'is_bot' => 'boolean',
         ];
     }
 

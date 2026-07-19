@@ -147,6 +147,33 @@ The owner is never offered a steal of their own card.
 - If no stealer remains, the server emits `TURN_ENDED` and then `TURN_STARTED`.
 - A player may receive at most one offer for the same card in one round.
 
+## Autonomous CMS bots
+
+- The CMS `Add 7 bots` action is available only for an open, unterminated lobby containing exactly one human and no existing bots.
+- It adds seven real `members` with persistent `users.is_bot = true`, producing an 8/8 server room.
+- Server-room bots are controlled only by the backend queue; native, web and simulator clients must never submit moves for them.
+- A bot acts only while it is the authoritative `current_player_id`. A per-game lock prevents duplicate bot turns.
+- Bot decisions match chaos probabilities: pass 28% of steal offers; otherwise attempt a move that is correct 52% of the time.
+- Every bot action uses the production `move` or `passSteal` controller path, so event order, steal progression, scoring, victory and realtime broadcasts remain identical to human actions.
+- Bots are excluded from presence inactivity removal and remain ready for a rematch.
+- When the next actor is human, the bot chain stops and waits for that human's real server action.
+
+## Lobby and inactivity notices
+
+- While Public Games is already open, a newly appearing room plays the same arrival sound as a newly joined lobby player. Initial hydration and rooms prefetched before opening Public Games remain silent.
+- The Bosnian inactivity title is exactly two rows: `TVOJ POTEZ` / `ČEKA`.
+- The final inactivity values `3`, `2`, `1` are a first-class `kick-countdown` action inside `GameActionQueue`, not an independent overlay mounted by the game layout.
+- `kick-countdown` preempts ordinary inactivity and gameplay notices, but a terminal room-exit action remains highest priority.
+
+## Synthetic public listings
+
+- After stale-room cleanup, the server maintains at least `MINIMUM_PUBLIC_ROOM_LISTINGS` active public list entries (default 10).
+- It fills only the deficit with synthetic in-progress listings and removes surplus synthetic listings as real active rooms increase.
+- Synthetic listings have fake host names, fake player counts, randomized ages, `started = true`, and `sync_driver = polling`.
+- They have no `members`, no player sessions, no heartbeat, no realtime token, and no Pusher/Ably/Reverb allocation or connection.
+- They render with the existing red `IN PROGRESS` duration and never show a Join action.
+- Cleanup must exclude synthetic listings from stale started-game deletion; only the balancing step creates or deletes them.
+
 ## Presentation order
 
 Each client processes relevant server events strictly by ascending event ID.

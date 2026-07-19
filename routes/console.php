@@ -12,7 +12,7 @@ Artisan::command('inspire', function () {
 
 Artisan::command('games:cleanup', function (GameCleanupService $cleanup) {
     $result = $cleanup->cleanup();
-    $this->info("Deleted {$result['lobby_games_deleted']} stale lobby games and {$result['started_games_deleted']} inactive started games.");
+    $this->info("Deleted {$result['lobby_games_deleted']} stale lobby games and {$result['started_games_deleted']} inactive started games. Synthetic listings: +{$result['synthetic_games_created']} / -{$result['synthetic_games_deleted']}; {$result['active_public_listings']} active public listings.");
 
     return self::SUCCESS;
 })->purpose('Delete stale lobby games and started games without recent moves');

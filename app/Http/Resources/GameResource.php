@@ -27,7 +27,24 @@ class GameResource extends JsonResource
             })
             ->groupBy('user_id');
 
-        $syncDriver = config('game.reverb_override') ? 'reverb' : ($this->sync_driver ?: 'polling');
+        $syncDriver = $this->is_synthetic
+            ? 'polling'
+            : (config('game.reverb_override') ? 'reverb' : ($this->sync_driver ?: 'polling'));
+        if ($this->is_synthetic) {
+            $colors = ['yellow', 'blue', 'emerald', 'purple', 'rose', 'orange', 'brown', 'silver'];
+            $names = config('game.synthetic_player_names');
+            $count = max(0, min(8, (int) $this->synthetic_player_count));
+            $nameOffset = (int) $this->id % count($names);
+            $members = collect($count > 0 ? range(0, $count - 1) : [])->map(fn (int $index) => [
+                'id' => -(((int) $this->id * 10) + $index + 1),
+                'name' => $index === 0 ? $this->synthetic_host_name : $names[($nameOffset + $index) % count($names)],
+                'email' => null,
+                'color' => $colors[$index % count($colors)],
+                'is_bot' => false,
+            ]);
+        } else {
+            $members = UserResource::collection($this->whenLoaded('members'));
+        }
 
         return [
             'id' => $this->id,
@@ -36,6 +53,8 @@ class GameResource extends JsonResource
             'started' => $this->started,
             'host_in_lobby' => $this->host_in_lobby,
             'is_private' => $this->is_private,
+            'is_synthetic' => (bool) $this->is_synthetic,
+            'synthetic_host_name' => $this->is_synthetic ? $this->synthetic_host_name : null,
             'terminated_at' => $this->terminated_at?->toISOString(),
             'termination_reason' => $this->termination_reason,
             'stack_id' => $this->stack_id,
@@ -70,8 +89,8 @@ class GameResource extends JsonResource
                 'heartbeat_interval_ms' => config('game.pusher_heartbeat_interval_ms'),
             ] : null,
             'current_card' => new CardResource($this->whenLoaded('currentCard')),
-            'members' => UserResource::collection($this->whenLoaded('members')),
-            'lobby_member_ids' => DB::table('members')
+            'members' => $members,
+            'lobby_member_ids' => $this->is_synthetic ? [] : DB::table('members')
                 ->where('game_id', $this->id)
                 ->where('in_lobby', true)
                 ->pluck('user_id')
