@@ -48,12 +48,23 @@ class GameController extends Controller
 
     private function recordGameEvent(Game $game, string $type, ?int $targetUserId = null, array $payload = []): GameEvent
     {
-        return GameEvent::create([
+        $event = GameEvent::create([
             'game_id' => $game->id,
             'type' => $type,
             'target_user_id' => $targetUserId,
             'payload' => $payload,
         ]);
+
+        Log::info('Game event recorded', [
+            'game_id' => (int) $game->id,
+            'event_id' => (int) $event->id,
+            'type' => $type,
+            'target_user_id' => $targetUserId,
+            'card_id' => isset($payload['card_id']) ? (int) $payload['card_id'] : null,
+            'move_id' => isset($payload['move_id']) ? (int) $payload['move_id'] : null,
+        ]);
+
+        return $event;
     }
 
     private function broadcastGameUpdated(Game|int $game, string $reason, ?string $driverOverride = null): void
@@ -781,6 +792,17 @@ class GameController extends Controller
                     'is_steal' => false,
                 ]);
             }
+            Log::info('Game move committed', [
+                'game_id' => (int) $game->id,
+                'move_id' => (int) $move->id,
+                'player_id' => (int) $move->player_id,
+                'card_id' => $move->card_id ? (int) $move->card_id : null,
+                'correct' => (bool) $move->correct,
+                'is_steal' => (bool) $move->is_steal,
+                'next_player_id' => $game->current_player_id ? (int) $game->current_player_id : null,
+                'next_card_id' => $game->current_card_id ? (int) $game->current_card_id : null,
+                'next_is_steal' => (bool) $game->is_steal_turn,
+            ]);
             $this->broadcastGameUpdated($game, 'move.created');
             $this->botTurnScheduler->schedule($game);
 

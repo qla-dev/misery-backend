@@ -148,6 +148,7 @@ class GameCleanupService
                 'id' => (int) $lockedGame->id,
                 'driver' => (string) ($lockedGame->sync_driver ?: 'polling'),
             ];
+            $this->logDeletionSnapshot($lockedGame, 'forced');
             $lockedGame->delete();
 
             return $details;
@@ -171,6 +172,7 @@ class GameCleanupService
                 }
 
                 $details = ['id' => (int) $game->id, 'driver' => (string) ($game->sync_driver ?: 'polling')];
+                $this->logDeletionSnapshot($game, $game->started ? 'stale_started' : 'stale_lobby');
                 $game->delete();
 
                 return $details;
@@ -185,6 +187,54 @@ class GameCleanupService
         }
 
         return $deleted;
+    }
+
+    private function logDeletionSnapshot(Game $game, string $deleteReason): void
+    {
+        $moves = $game->moves()
+            ->latest('id')
+            ->limit(50)
+            ->get(['id', 'player_id', 'card_id', 'correct', 'is_steal', 'created_at'])
+            ->reverse()
+            ->values()
+            ->map(fn ($move) => [
+                'id' => (int) $move->id,
+                'player_id' => (int) $move->player_id,
+                'card_id' => $move->card_id ? (int) $move->card_id : null,
+                'correct' => (bool) $move->correct,
+                'is_steal' => (bool) $move->is_steal,
+                'at' => $move->created_at?->toISOString(),
+            ]);
+        $events = $game->events()
+            ->latest('id')
+            ->limit(100)
+            ->get(['id', 'type', 'target_user_id', 'payload', 'created_at'])
+            ->reverse()
+            ->values()
+            ->map(fn ($event) => [
+                'id' => (int) $event->id,
+                'type' => $event->type,
+                'target_user_id' => $event->target_user_id ? (int) $event->target_user_id : null,
+                'card_id' => isset($event->payload['card_id']) ? (int) $event->payload['card_id'] : null,
+                'move_id' => isset($event->payload['move_id']) ? (int) $event->payload['move_id'] : null,
+                'at' => $event->created_at?->toISOString(),
+            ]);
+
+        Log::info('Game deletion snapshot', [
+            'game_id' => (int) $game->id,
+            'delete_reason' => $deleteReason,
+            'owner_id' => (int) $game->owner_id,
+            'started' => (bool) $game->started,
+            'current_player_id' => $game->current_player_id ? (int) $game->current_player_id : null,
+            'turn_owner_id' => $game->turn_owner_id ? (int) $game->turn_owner_id : null,
+            'current_card_id' => $game->current_card_id ? (int) $game->current_card_id : null,
+            'is_steal_turn' => (bool) $game->is_steal_turn,
+            'member_ids' => DB::table('members')->where('game_id', $game->id)->orderBy('id')->pluck('user_id')->map(fn ($id) => (int) $id)->all(),
+            'move_count' => $game->moves()->count(),
+            'recent_moves' => $moves->all(),
+            'event_count' => $game->events()->count(),
+            'recent_events' => $events->all(),
+        ]);
     }
 
     private function broadcastDeletion(int $gameId, string $driver): void
