@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\GameCleanupService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class GameCleanupTest extends TestCase
@@ -96,6 +97,46 @@ class GameCleanupTest extends TestCase
         $this->assertSame(0, $second['synthetic_games_created']);
         $this->assertSame(0, $second['synthetic_games_deleted']);
         $this->assertSame(10, $second['active_public_listings']);
+    }
+
+    public function test_cleanup_logs_moves_and_events_before_cascade_deleting_a_game(): void
+    {
+        config([
+            'game.started_game_move_timeout_seconds' => 180,
+            'game.auto_creation' => false,
+        ]);
+
+        $game = $this->game('AUDT1001', true);
+        $move = Move::create([
+            'game_id' => $game->id,
+            'player_id' => $game->owner_id,
+            'correct' => false,
+        ]);
+        $event = $game->events()->create([
+            'type' => 'MOVE_RESULT',
+            'payload' => ['move_id' => $move->id],
+        ]);
+        DB::table('moves')->where('id', $move->id)->update([
+            'created_at' => now()->subSeconds(181),
+            'updated_at' => now()->subSeconds(181),
+        ]);
+        DB::table('games')->where('id', $game->id)->update(['updated_at' => now()->subSeconds(181)]);
+        Log::spy();
+
+        app(GameCleanupService::class)->cleanup();
+
+        Log::shouldHaveReceived('info')->withArgs(function (string $message, array $context) use ($event, $game, $move): bool {
+            return $message === 'Game deletion snapshot'
+                && $context['game_id'] === $game->id
+                && $context['delete_reason'] === 'stale_started'
+                && $context['move_count'] === 1
+                && $context['event_count'] === 1
+                && $context['recent_moves'][0]['id'] === $move->id
+                && $context['recent_events'][0]['id'] === $event->id;
+        })->once();
+        $this->assertDatabaseMissing('games', ['id' => $game->id]);
+        $this->assertDatabaseMissing('moves', ['id' => $move->id]);
+        $this->assertDatabaseMissing('game_events', ['id' => $event->id]);
     }
 
     private function game(string $code, bool $started): Game
