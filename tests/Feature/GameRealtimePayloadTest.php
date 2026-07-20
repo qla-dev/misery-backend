@@ -68,6 +68,7 @@ class GameRealtimePayloadTest extends TestCase
         $payload = app(GameRealtimePayload::class)->build($game->id, 'move.correct');
 
         $this->assertSame($game->id, $payload['state']['id']);
+        $this->assertSame($game->events()->max('id'), $payload['state_revision']);
         $this->assertCount(8, $payload['state']['members']);
         $this->assertCount(4, $payload['events']);
         $this->assertArrayHasKey('card', $payload['events'][3]['payload']);
@@ -86,6 +87,7 @@ class GameRealtimePayloadTest extends TestCase
         $payload = app(GameRealtimePayload::class)->build($game->id, 'heartbeat', $first->id);
 
         $this->assertCount(2, $payload['events']);
+        $this->assertSame($game->events()->max('id'), $payload['state_revision']);
         $this->assertTrue(collect($payload['events'])->every(fn ($event) => $event['id'] > $first->id));
     }
 }

@@ -48,6 +48,8 @@ class GameResource extends JsonResource
 
         return [
             'id' => $this->id,
+            'state_revision' => (int) DB::table('game_events')->where('game_id', $this->id)->max('id'),
+            'state_sent_at' => now()->toISOString(),
             'code' => $this->code,
             'owner_id' => $this->owner_id,
             'started' => $this->started,

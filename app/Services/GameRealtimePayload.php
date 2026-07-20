@@ -19,6 +19,7 @@ class GameRealtimePayload
                 'game_id' => $gameId,
                 'reason' => $reason,
                 'sent_at' => now()->toISOString(),
+                'state_revision' => 0,
                 'deleted' => true,
                 'state' => null,
                 'events' => [],
@@ -27,6 +28,7 @@ class GameRealtimePayload
         }
 
         $eventQuery = $game->events();
+        $stateRevision = (int) $game->events()->max('id');
         $events = $afterEventId === null
             ? $eventQuery->latest('id')->limit(self::MAX_EVENT_COUNT)->get()->sortBy('id')->values()
             : $eventQuery->where('id', '>', $afterEventId)->oldest('id')->limit(200)->get()->values();
@@ -73,6 +75,7 @@ class GameRealtimePayload
             'game_id' => $gameId,
             'reason' => $reason,
             'sent_at' => now()->toISOString(),
+            'state_revision' => $stateRevision,
             'deleted' => false,
             'state' => [
                 'id' => (int) $game->id,
