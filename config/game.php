@@ -31,6 +31,20 @@ return [
     'bot_turn_delay_max_ms' => max(0, (int) env('BOT_TURN_DELAY_MAX_MS', 6000)),
     'auto_creation' => filter_var(env('AUTO_CREATION', false), FILTER_VALIDATE_BOOL),
     'minimum_public_room_listings' => max(0, (int) env('MINIMUM_PUBLIC_ROOM_LISTINGS', 10)),
+    // Explicit subsets used to keep multi-bot lobbies culturally mixed. Every
+    // name here also belongs to synthetic_player_names, the shared room pool.
+    'bosnian_player_names' => [
+        'Amina', 'Amra', 'Lejla', 'Emina', 'Lamija', 'Ajla', 'Nejra', 'Merjem', 'Naida', 'Selma',
+        'Azra', 'Belma', 'Sabina', 'Jasmina', 'Medina', 'Meliha', 'Senada', 'Zerina', 'Dalila',
+        'Amar', 'Adnan', 'Haris', 'Emir', 'Edin', 'Mirza', 'Tarik', 'Armin', 'Kenan', 'Faris', 'Hamza',
+        'Ahmed', 'Ibrahim', 'Ismail', 'Jusuf', 'Davud', 'Kerim', 'Nermin', 'Samir', 'Vedad', 'Bakir',
+    ],
+    'us_player_names' => [
+        'Emma', 'Olivia', 'Ava', 'Sophia', 'Isabella', 'Charlotte', 'Amelia', 'Harper', 'Evelyn',
+        'Abigail', 'Emily', 'Ella', 'Elizabeth', 'Camila', 'Luna', 'Sofia', 'Avery', 'Mila', 'Aria',
+        'Liam', 'Noah', 'Oliver', 'Elijah', 'James', 'William', 'Lucas', 'Henry', 'Theodore',
+        'Jack', 'Levi', 'Alexander', 'Jackson', 'Daniel', 'Michael', 'Mason', 'Sebastian', 'Ethan',
+    ],
     'synthetic_player_names' => [
         // Female names used across Bosnia and Herzegovina, Serbia, and Croatia.
         'Amina', 'Amra', 'Lejla', 'Emina', 'Hana', 'Sara', 'Lamija', 'Ajla', 'Nejra', 'Merjem',
@@ -55,6 +69,11 @@ return [
         'Damir', 'Denis', 'Dino', 'Ervin', 'Zlatan', 'Vedran', 'Boris', 'Darko', 'Igor', 'Saša',
         'Aleksandar', 'Vladimir', 'Predrag', 'Nenad', 'Miroslav', 'Radovan', 'Rade', 'Željko', 'Branimir', 'Dalibor',
         'Jakov', 'Fran', 'Roko', 'Niko', 'Toma', 'Matija', 'Andrija', 'Ilija', 'Vedad', 'Bakir',
+        // US names. Bots and synthetic room listings use this same combined pool.
+        'Emma', 'Olivia', 'Ava', 'Sophia', 'Isabella', 'Charlotte', 'Amelia', 'Harper', 'Evelyn', 'Abigail',
+        'Emily', 'Ella', 'Elizabeth', 'Camila', 'Luna', 'Sofia', 'Avery', 'Mila', 'Aria',
+        'Liam', 'Noah', 'Oliver', 'Elijah', 'James', 'William', 'Lucas', 'Henry', 'Theodore', 'Jack',
+        'Levi', 'Alexander', 'Jackson', 'Daniel', 'Michael', 'Mason', 'Sebastian', 'Ethan',
     ],
     'cleanup_username' => env('GAME_CLEANUP_USERNAME', env('CMS_USERNAME', 'admin')),
     'cleanup_password' => env('GAME_CLEANUP_PASSWORD', env('CMS_PASSWORD', '1234')),

@@ -147,6 +147,35 @@ function assertState(game, memberIds) {
   return failures;
 }
 
+function assertRealtimeRecovery(update, game, afterEventId, expectedEvents = []) {
+  const failures = [];
+  if (Number(update?.version) !== 1) failures.push('heartbeat realtime payload version is not 1');
+  if (Number(update?.game_id) !== Number(game.id)) failures.push('heartbeat realtime payload game_id differs from game');
+  if (update?.reason !== 'heartbeat') failures.push('heartbeat realtime payload reason is not heartbeat');
+  if (update?.deleted || !update?.state) failures.push('heartbeat returned deleted or missing state for active game');
+  const state = update?.state ?? {};
+  for (const key of ['current_player_id', 'turn_owner_id', 'winner_id']) {
+    if (Number(state[key] ?? 0) !== Number(game[key] ?? 0)) failures.push(`heartbeat state ${key} differs from mutation response`);
+  }
+  if (Boolean(state.is_steal_turn) !== Boolean(game.is_steal_turn)) failures.push('heartbeat state is_steal_turn differs from mutation response');
+  if (Number(state.current_card?.id ?? 0) !== Number(game.current_card?.id ?? 0)) failures.push('heartbeat current card differs from mutation response');
+  const events = update?.events ?? [];
+  const eventIds = events.map((event) => Number(event.id));
+  if (eventIds.some((id) => id <= Number(afterEventId))) failures.push('heartbeat returned an event at or before after_event_id');
+  if (eventIds.some((id, index) => index > 0 && id <= eventIds[index - 1])) failures.push('heartbeat recovery events are not strictly increasing');
+  for (const expected of expectedEvents) {
+    if (!eventIds.includes(Number(expected.id))) failures.push(`heartbeat recovery omitted event ${expected.id}`);
+  }
+  return {
+    transport: 'POST /games/{id}/heartbeat',
+    after_event_id: afterEventId,
+    event_ids: eventIds,
+    game_get_used: false,
+    payload_version: update?.version ?? null,
+    failures,
+  };
+}
+
 function expectedEventTypes(action, correct, before, after) {
   if (action === 'pass') return after.is_steal_turn
     ? ['STEAL_OFFERED']
@@ -191,6 +220,7 @@ const REQUIRED_NATIVE_SCENARIOS = [
   'queued-move-result.consume-before-turn-started',
   'wrong-owner-response.consume-move-result-before-turn-hold',
   'web-steal-offer.requires-explicit-accept-or-pass',
+  'realtime-payload.applies-without-game-get',
 ];
 
 function assertMovePresentation(action, correct, before, newEvents) {
@@ -328,13 +358,19 @@ async function runGame({ baseUrl, seed, playerCount, maxActions, targetScore, ba
       method: 'POST', body: { user_id: host.id, stack: 'normal', target_score: targetScore },
     });
     lastEventId = Math.max(0, ...(game.events ?? []).map((event) => Number(event.id)));
-    await writeLog({ action: 'start', actor_id: host.id, response_status: 200, server: serverState(game), new_events: game.events ?? [], result: 'ok' });
+    const initialRecoveryPayload = await request(baseUrl, `/games/${game.id}/heartbeat`, {
+      method: 'POST', body: { user_id: host.id, after_event_id: 0 },
+    });
+    const initialRealtimeRecovery = assertRealtimeRecovery(initialRecoveryPayload, game, 0, game.events ?? []);
+    if (initialRealtimeRecovery.failures.length) throw new Error(initialRealtimeRecovery.failures.join('; '));
+    await writeLog({ action: 'start', actor_id: host.id, response_status: 200, server: serverState(game), new_events: game.events ?? [], realtime_recovery: initialRealtimeRecovery, result: 'ok' });
 
     const memberIds = new Set(players.map((player) => Number(player.id)));
     while (!game.winner_id && step < maxActions) {
       step += 1;
       gameplayActionCount += 1;
       const before = serverState(game);
+      const eventCursor = lastEventId;
       const actorId = Number(game.current_player_id);
       // Every game begins with the production regression that previously froze
       // native: the first PC move succeeds while another client is counting down.
@@ -354,9 +390,14 @@ async function runGame({ baseUrl, seed, playerCount, maxActions, targetScore, ba
       game = response.game ?? response;
       const newEvents = (game.events ?? []).filter((event) => Number(event.id) > lastEventId);
       if (newEvents.length) lastEventId = Number(newEvents.at(-1).id);
+      const recoveryPayload = await request(baseUrl, `/games/${game.id}/heartbeat`, {
+        method: 'POST', body: { user_id: host.id, after_event_id: eventCursor },
+      });
+      const realtimeRecovery = assertRealtimeRecovery(recoveryPayload, game, eventCursor, newEvents);
       const expected = expectedEventTypes(action, correct, before, serverState(game));
       const actual = newEvents.map((event) => event.type);
       const failures = assertState(game, memberIds);
+      failures.push(...realtimeRecovery.failures);
       failures.push(...assertMovePresentation(action, correct, before, newEvents));
       const immediateHoldFailures = assertImmediateOwnerHold(action, correct, before, serverState(game), newEvents, actorId);
       failures.push(...immediateHoldFailures);
@@ -381,6 +422,7 @@ async function runGame({ baseUrl, seed, playerCount, maxActions, targetScore, ba
         drawn_card_face_layout: DRAWN_CARD_FACE_LAYOUT,
         web_steal_decision: webStealDecision(before, action),
         native_countdown: nativeCountdown,
+        realtime_recovery: realtimeRecovery,
         invariants: failures,
         result: failures.length ? 'failure' : 'ok',
       });

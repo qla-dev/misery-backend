@@ -152,13 +152,16 @@ The owner is never offered a steal of their own card.
 ## Autonomous CMS bots
 
 - The CMS bot action is available only for an open, unterminated lobby containing exactly one human and no existing bots.
-- The operator chooses 1–7 bots. They become real `members` with persistent `users.is_bot = true` and unique random names from the public-room name list.
+- The operator chooses 1–7 bots. They become real `members` with persistent `users.is_bot = true` and unique random names from the combined Bosnian/Balkan and US public-room name pool.
+- When two or more bots are added together, at least one name comes from the Bosnian/Balkan set and at least one comes from the US set; remaining names are random across the combined pool.
+- Adding bots immediately broadcasts `bots.added` over the room's assigned realtime transport so an open Pusher lobby sees them without a game `GET`.
 - Bot count is validated server-side and may not exceed the seven available seats in a one-human lobby.
 - Each bot waits a configurable randomized thinking interval after its card becomes current before acting; the default is 3–6 seconds.
 - Server-room bots are controlled only by the backend queue; native, web and simulator clients must never submit moves for them.
 - A bot acts only while it is the authoritative `current_player_id`. A per-game lock prevents duplicate bot turns.
 - Bot decisions match chaos probabilities: pass 28% of steal offers; otherwise attempt a move that is correct 52% of the time.
 - Every bot action uses the production `move` or `passSteal` controller path, so event order, steal progression, scoring, victory and realtime broadcasts remain identical to human actions.
+- A bot in a Pusher-assigned room publishes `move.created` or `steal.passed` through that same Pusher game channel.
 - Bots are excluded from presence inactivity removal and remain ready for a rematch.
 - When the next actor is human, the bot chain stops and waits for that human's real server action.
 
@@ -166,6 +169,7 @@ The owner is never offered a steal of their own card.
 
 - While Public Games is already open, a newly appearing room plays the same arrival sound as a newly joined lobby player. Initial hydration and rooms prefetched before opening Public Games remain silent.
 - The Bosnian inactivity title is exactly two rows: `TVOJ POTEZ` / `ČEKA`.
+- The inactivity title uses the same shared 10 px circle-to-title gap as every other `LaneModal` title. A two-row title must not add its own outer top margin.
 - The final inactivity values `3`, `2`, `1` are a first-class `kick-countdown` action inside `GameActionQueue`, not an independent overlay mounted by the game layout.
 - `kick-countdown` preempts ordinary inactivity and gameplay notices, but a terminal room-exit action remains highest priority.
 
@@ -276,8 +280,15 @@ For the client that submitted a move, the committed event stream in the move res
 
 - UI animations never determine server state.
 - A failed or slow request must not freeze navigation or touches.
-- Reconnect loads the snapshot plus unseen events after the last completed event ID.
-- Snapshot data updates players, lanes, current card and winner; it must not invent presentation events.
+- After the one initial room bootstrap, every game/lobby update is applied directly from the Pusher, Ably or Reverb `game.updated` payload. A realtime callback must never trigger a game or snapshot `GET`.
+- The realtime payload is authoritative and contains compact game state, current card, member IDs, hand card IDs, unseen ordered gameplay events, and the newly created chat message when relevant.
+- Expo web uses `pusher-js` for Pusher rooms; it must not silently fall back to polling merely because the client is running in a browser.
+- While realtime is connected there is no periodic 30-second safety `GET`.
+- Presence and missed-event recovery use `POST /api/games/{id}/heartbeat` with `after_event_id`. Its response contains current compact state and every event after that cursor.
+- App resume uses the heartbeat `POST` response. It must not issue a game `GET` while realtime is connected.
+- A game `GET` is allowed only for initial bootstrap or explicit polling fallback when the realtime connection cannot be established.
+- The Pusher event body must remain below Pusher's 10 KB limit. Recovery heartbeat responses are not constrained by that event limit.
+- Realtime state updates players, lanes, current card and winner; it must not invent presentation events.
 - A client reconnecting during a steal decision must recover the current `STEAL_OFFERED` exactly once.
 
 ## Chaos actions
@@ -331,6 +342,8 @@ The action's JSONL entry must include a `native_countdown` object containing cou
 - A local move has exactly one result overlay.
 - A local card remains outside the lane until that overlay completes.
 - A correct local move clamps the card into the lane only after score reveal; a wrong move never inserts it.
+- Every heartbeat recovery response has realtime payload version 1, matches the authoritative POST response state, and includes every new event after the supplied cursor in ascending order.
+- Normal simulated gameplay performs no game/snapshot GET; state advances through mutation responses plus realtime-format heartbeat POST recovery.
 
 Any invariant failure fails the run immediately and saves the complete log.
 

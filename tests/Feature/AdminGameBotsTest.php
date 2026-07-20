@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\GameUpdated;
 use App\Http\Middleware\CmsBasicAuth;
 use App\Models\Card;
 use App\Models\Game;
@@ -9,6 +10,7 @@ use App\Models\User;
 use App\Services\BotTurnScheduler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class AdminGameBotsTest extends TestCase
@@ -17,8 +19,9 @@ class AdminGameBotsTest extends TestCase
 
     public function test_admin_can_choose_how_many_named_bots_to_add_to_an_open_single_player_lobby(): void
     {
+        Event::fake([GameUpdated::class]);
         $host = User::factory()->create(['color' => 'yellow']);
-        $game = Game::create(['code' => 'BOTS1234', 'owner_id' => $host->id, 'started' => false]);
+        $game = Game::create(['code' => 'BOTS1234', 'owner_id' => $host->id, 'started' => false, 'sync_driver' => 'pusher']);
         $game->members()->attach($host, ['in_lobby' => true]);
 
         $this->withoutMiddleware(CmsBasicAuth::class)
@@ -31,7 +34,15 @@ class AdminGameBotsTest extends TestCase
         $this->assertCount(3, $bots);
         $this->assertSame(3, $bots->pluck('name')->unique()->count());
         $bots->each(fn (User $bot) => $this->assertContains($bot->name, config('game.synthetic_player_names')));
+        $this->assertTrue($bots->pluck('name')->intersect(config('game.us_player_names'))->isNotEmpty());
+        $this->assertTrue($bots->pluck('name')->intersect(config('game.bosnian_player_names'))->isNotEmpty());
         $this->assertSame(4, DB::table('members')->where('game_id', $game->id)->where('in_lobby', true)->count());
+        Event::assertDispatched(GameUpdated::class, fn (GameUpdated $event) =>
+            $event->gameId === $game->id
+            && $event->reason === 'bots.added'
+            && $event->driver === 'pusher'
+            && count($event->realtimePayload['state']['members'] ?? []) === 4
+        );
 
         $this->withoutMiddleware(CmsBasicAuth::class)
             ->postJson(route('simulator.rooms.bots.store', $game), ['count' => 1])
@@ -57,6 +68,7 @@ class AdminGameBotsTest extends TestCase
 
     public function test_active_bot_plays_without_a_persistent_queue_worker(): void
     {
+        Event::fake([GameUpdated::class]);
         config([
             'queue.default' => 'database',
             'game.bot_turn_delay_min_ms' => 0,
@@ -74,6 +86,7 @@ class AdminGameBotsTest extends TestCase
             'current_card_id' => $current->id,
             'current_player_id' => $bot->id,
             'turn_owner_id' => $bot->id,
+            'sync_driver' => 'pusher',
         ]);
         $game->members()->attach([$bot->id, $human->id]);
         DB::table('game_cards')->insert([
@@ -91,5 +104,10 @@ class AdminGameBotsTest extends TestCase
 
         $this->assertDatabaseHas('moves', ['game_id' => $game->id, 'player_id' => $bot->id]);
         $this->assertDatabaseCount('jobs', 0);
+        Event::assertDispatched(GameUpdated::class, fn (GameUpdated $event) =>
+            $event->gameId === $game->id
+            && $event->reason === 'move.created'
+            && $event->driver === 'pusher'
+        );
     }
 }
