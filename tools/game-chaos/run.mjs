@@ -30,11 +30,15 @@ const LANE_CARD_LAYOUT = {
 };
 const DRAWN_CARD_FACE_LAYOUT = {
   surface: 'face-up-drawn-card',
+  body_flow: ['title-subtitle-header', 'artwork', 'separate-score-footer'],
+  artwork_and_footer_overlap: false,
   header: {
     shared_parent: true,
-    vertical_padding: 10,
-    title_subtitle_gap: 10,
-    equal_outer_and_inner_spacing: true,
+    base_vertical_padding: 20,
+    border_to_border_top_addition: 4,
+    top_padding: 24,
+    bottom_padding: 10,
+    title_subtitle_gap: 5,
   },
   title: {
     font: 'BebasNeue_400Regular',
@@ -45,8 +49,39 @@ const DRAWN_CARD_FACE_LAYOUT = {
   artwork: {
     explicit_width: null,
     min_height: '100%',
-    full_bleed_left_right: true,
+    horizontal_inset: 16,
+    inset_rule: 'inner-border-inset-plus-border-width-plus-5px-padding',
+    min_height: 'header-to-score-footer',
+    min_width: '100%',
+    nested_percentage_wrapper: false,
+    rendering: 'aspect-preserved-height-fitted-image',
+    width: 'auto-from-source-aspect-ratio',
+    crop: 'horizontal-only-at-padded-edges',
+    vertical_alignment: 'top',
+    source_top_always_visible: true,
   },
+  inner_border: {
+    highest_layer: true,
+    above_score_footer_and_yellow_tab: true,
+  },
+};
+const LANE_MODAL_SPACING = {
+  circle_size: 160,
+  circle_to_content_gap: 15,
+  title_to_message_gap: {
+    after_two_rows: 12,
+    after_one_row: 17,
+  },
+  circle_spacing_owner: 'shared-circle-margin-bottom',
+  logs_debug_tap_to_dismiss: false,
+  logs_debug_waiting_title: ['TVOJ POTEZ', 'CEKA'],
+  waiting_title_font_size: 48,
+  waiting_title_auto_shrink: false,
+  waiting_icon_stroke_width: 1.5,
+  result_prefix_matches_hold_title: true,
+  result_prefix_font_padding: true,
+  result_prefix_line_height: 56,
+  result_prefix_top_padding: 4,
 };
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const LOG_DIR = path.join(ROOT, 'storage', 'logs', 'game-chaos');

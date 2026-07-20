@@ -170,6 +170,13 @@ The owner is never offered a steal of their own card.
 - While Public Games is already open, a newly appearing room plays the same arrival sound as a newly joined lobby player. Initial hydration and rooms prefetched before opening Public Games remain silent.
 - The Bosnian inactivity title is exactly two rows: `TVOJ POTEZ` / `ČEKA`.
 - The inactivity title uses the same shared 10 px circle-to-title gap as every other `LaneModal` title. A two-row title must not add its own outer top margin.
+- Every `LaneModal` variant gets its circle-to-content distance from one 15 px `marginBottom` on the shared circle itself. Do not derive this distance from branch-specific title or `LaneProgressBadge` margins, and do not use a parent stack gap for it.
+- Circle-to-content spacing and title-to-message spacing are independent. After two-row primary content (a player/lane row or a two-row title), the subtitle/message gap is 12 px. After a one-row title, it is 17 px. Changing the 15 px circle gap must never change either value.
+- A `LaneModal` opened from the LOGS overlay debugger is persistent and must ignore taps on the overlay background; it closes only through its explicit `X` control. Gameplay overlays retain their normal tap-to-dismiss behavior.
+- LOGS includes a dedicated persistent inactivity-warning preview using the production two-row `TVOJ POTEZ` / `ČEKA` (`YOUR TURN` / `IS WAITING`) title layout.
+- The second inactivity-title row never uses automatic font shrinking; `ČEKA` / `IS WAITING` stays uppercase at the same 48 px title size as the first row. Its warning shield uses a visibly thin 1.5 px stroke, not the older heavy 3.5 px stroke.
+- The emphasized `LANE OF` / `STAZA OD` line in correct, wrong and steal results uses the same vertical font metrics as the two-row hold title: font padding enabled, 56 px line height and 4 px top padding. Equal numeric gaps must also produce equal visible circle-to-title spacing.
+- The correct/steal misery-rate header is positioned below the device's top safe-area inset plus 12 px, with 40 px as the minimum legacy offset. It must never render under an iPhone notch or Dynamic Island.
 - The final inactivity values `3`, `2`, `1` are a first-class `kick-countdown` action inside `GameActionQueue`, not an independent overlay mounted by the game layout.
 - `kick-countdown` preempts ordinary inactivity and gameplay notices, but a terminal room-exit action remains highest priority.
 
@@ -209,11 +216,18 @@ For the client that submitted a move, the committed event stream in the move res
 
 ## Face-up drawn card
 
+- The card body is normal vertical layout in this exact order: title/subtitle header, artwork, separate bottom black score container. Artwork and score container must not be absolutely positioned over each other.
 - The title and subtitle share one header parent.
-- Header top padding, title/subtitle gap, and header bottom padding are all exactly 10 px.
-- Do not add an independent top margin that makes the visible top and bottom spacing unequal.
+- The title/subtitle header uses 20 px base vertical padding and a 5 px title/subtitle gap.
+- Its top padding also includes the 4 px visible distance between the 5 px outer border and the inner border's 9 px inset, for 24 px total top padding. Bottom padding remains 20 px.
 - The Bebas title keeps native font padding and 8 px of extra line height so `Č`, `Ć`, `Đ`, `Š`, and `Ž` remain intact.
-- The artwork has no explicit `width: 100%`; it uses `minHeight: 100%` and stretches full-bleed to the left and right edges of the face-up card.
+- The artwork region keeps 5 px of clear padding after the inner border: 9 px border inset + 2 px border width + 5 px padding, so artwork uses a 16 px left/right inset.
+- The padded artwork region has a minimum height equal to all remaining card space from the header to the beginning of the bottom black score container.
+- The artwork image has both `minWidth: 100%` and `minHeight: 100%` inside that region while preserving source aspect ratio.
+- The header is followed directly by one flex artwork element. Do not nest a second percentage-sized artwork wrapper inside it; that can over-measure on iOS and clip the source top.
+- Card artwork preserves its original aspect ratio and scales until both minimum dimensions are filled, then centers horizontally inside the clipped padded region.
+- The image starts at top position 0 and is never distorted. Depending on source aspect ratio, overflow may crop at the bottom or left/right edges, but never at the top.
+- The inner border is the highest visual layer and must remain visible above the header, artwork, black score footer and yellow score container.
 
 ## Card footer and interaction
 
